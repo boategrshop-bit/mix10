@@ -186,9 +186,8 @@ export default function Home() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-10 sm:px-6">
       <div className="mb-2 space-y-2">
-        <span className="inline-flex items-center rounded-full border border-[#4382BB]/30 bg-[#4382BB]/10 px-3 py-1 text-xs font-semibold text-[#7bafdb]">
-          MIX10
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="MIX10" className="h-10 w-auto" />
         <h1 className="bg-gradient-to-r from-[#7bafdb] to-[#4382BB] bg-clip-text text-3xl font-bold text-transparent">
           สร้างสตอรี่บอร์ดและวิดีโอโฆษณาอัตโนมัติ
         </h1>

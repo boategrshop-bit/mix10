@@ -11,6 +11,9 @@ const notoSansThai = Noto_Sans_Thai({
 export const metadata: Metadata = {
   title: "MIX10",
   description: "Generate a marketing storyboard and video prompt, then preview a mock video.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({
