@@ -54,7 +54,7 @@ export default function BriefForm({
     <div className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm backdrop-blur-sm">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <ImageUploader label="รูปนางแบบ" file={modelImage} onChange={onModelImageChange} />
-        <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} />
+        <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} allowUrlImport />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -1,4 +1,4 @@
-const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+export const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB client-side cap (server allows more)
 const MIN_BRIEF_LENGTH = 5;
 const MAX_BRIEF_LENGTH = 500;
