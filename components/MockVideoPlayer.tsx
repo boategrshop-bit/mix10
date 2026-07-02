@@ -39,13 +39,13 @@ export default function MockVideoPlayer({ placeholder, orientation }: MockVideoP
             isReal ? "bg-emerald-600" : "bg-black/60"
           }`}
         >
-          {isReal ? "Gemini" : "Preview"}
+          {isReal ? "Real" : "Preview"}
         </span>
       </div>
       <p className="whitespace-pre-line text-xs leading-relaxed text-gray-500">{placeholder.caption}</p>
       {isReal ? (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
-          Generated via Google Gemini Omni Flash.
+          {placeholder.providerLabel}
         </div>
       ) : (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">

@@ -8,10 +8,11 @@ import ScenePlanEditor from "@/components/ScenePlanEditor";
 import StoryboardSheetPreview from "@/components/StoryboardSheetPreview";
 import VideoPromptEditor from "@/components/VideoPromptEditor";
 import VoiceGenderSelector from "@/components/VoiceGenderSelector";
+import VideoTargetSelector from "@/components/VideoTargetSelector";
 import GenerateVideoPanel from "@/components/GenerateVideoPanel";
 import FullPromptCopyBox from "@/components/FullPromptCopyBox";
 import type { ScenePlanItem, VideoJobResult } from "@/lib/types";
-import { composeBrief, type BriefTemplateFields, type VoiceGender } from "@/lib/prompt-template";
+import { composeBrief, type BriefTemplateFields, type VideoTarget, type VoiceGender } from "@/lib/prompt-template";
 import { buildOmniFlashPromptText } from "@/lib/gemini";
 
 interface StoryboardError {
@@ -52,6 +53,7 @@ export default function Home() {
   const [videoPrompt, setVideoPrompt] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("female");
+  const [videoTarget, setVideoTarget] = useState<VideoTarget>("omni-flash");
   const [storyboardError, setStoryboardError] = useState<StoryboardError | null>(null);
   const [scenePlanDirty, setScenePlanDirty] = useState(false);
 
@@ -156,6 +158,7 @@ export default function Home() {
     if (narrationScript) form.append("narrationScript", narrationScript);
     if (captionScript) form.append("captionScript", captionScript);
     form.append("voiceGender", voiceGender);
+    form.append("videoTarget", videoTarget);
     form.append("orientation", fields.orientation);
     if (geminiApiKey) {
       form.append("apiKey", geminiApiKey);
@@ -278,7 +281,14 @@ export default function Home() {
 
       {storyboardImage && <VoiceGenderSelector value={voiceGender} onChange={setVoiceGender} />}
 
-      {storyboardImage && videoPrompt && <FullPromptCopyBox promptText={fullVideoPromptText} />}
+      {storyboardImage && <VideoTargetSelector value={videoTarget} onChange={setVideoTarget} />}
+
+      {storyboardImage && videoPrompt && (
+        <>
+          <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Google Flow" />
+          <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Grok" />
+        </>
+      )}
 
       {storyboardImage && (
         <GenerateVideoPanel

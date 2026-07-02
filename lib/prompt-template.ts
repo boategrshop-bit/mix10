@@ -1,5 +1,6 @@
 export type Orientation = "vertical" | "horizontal" | "square";
 export type VoiceGender = "male" | "female";
+export type VideoTarget = "omni-flash" | "veo-3.1-lite";
 
 export interface BriefTemplateFields {
   productName: string;

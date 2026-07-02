@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GeminiApiError } from "@/lib/gemini";
+import { VeoApiError } from "@/lib/veo";
 import { selectVideoProvider } from "@/lib/video-provider";
-import type { Orientation, VoiceGender } from "@/lib/prompt-template";
+import type { Orientation, VideoTarget, VoiceGender } from "@/lib/prompt-template";
 import type { ApiErrorBody, GenerateVideoInput } from "@/lib/types";
 
 const VALID_ORIENTATIONS: Orientation[] = ["vertical", "horizontal", "square"];
 const VALID_VOICE_GENDERS: VoiceGender[] = ["male", "female"];
+const VALID_VIDEO_TARGETS: VideoTarget[] = ["omni-flash", "veo-3.1-lite"];
 
 function errorResponse(code: string, message: string, status: number) {
   const body: ApiErrorBody = { error: { code, message } };
@@ -21,6 +23,7 @@ export async function POST(request: NextRequest) {
   const narrationScript = form.get("narrationScript");
   const captionScript = form.get("captionScript");
   const voiceGenderRaw = form.get("voiceGender");
+  const videoTargetRaw = form.get("videoTarget");
   const orientationRaw = form.get("orientation");
   const modelImage = form.get("modelImage");
   const productImage = form.get("productImage");
@@ -43,6 +46,9 @@ export async function POST(request: NextRequest) {
   if (VALID_VOICE_GENDERS.includes(voiceGenderRaw as VoiceGender)) {
     input.voiceGender = voiceGenderRaw as VoiceGender;
   }
+  if (VALID_VIDEO_TARGETS.includes(videoTargetRaw as VideoTarget)) {
+    input.videoTarget = videoTargetRaw as VideoTarget;
+  }
 
   if (typeof apiKey === "string" && apiKey) {
     if (!(modelImage instanceof Blob) || !(productImage instanceof Blob)) {
@@ -63,7 +69,7 @@ export async function POST(request: NextRequest) {
     const result = await selectVideoProvider(input).generateVideo(input);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof GeminiApiError) {
+    if (err instanceof GeminiApiError || err instanceof VeoApiError) {
       return errorResponse("gemini_error", err.message, err.status >= 400 ? err.status : 500);
     }
     return errorResponse("unknown_error", "Could not reach Gemini, check connection and retry.", 502);

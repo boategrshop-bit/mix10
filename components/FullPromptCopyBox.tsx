@@ -4,9 +4,10 @@ import { useState } from "react";
 
 interface FullPromptCopyBoxProps {
   promptText: string;
+  platformName: string;
 }
 
-export default function FullPromptCopyBox({ promptText }: FullPromptCopyBoxProps) {
+export default function FullPromptCopyBox({ promptText, platformName }: FullPromptCopyBoxProps) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -22,7 +23,7 @@ export default function FullPromptCopyBox({ promptText }: FullPromptCopyBoxProps
   return (
     <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm backdrop-blur-sm">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-gray-100">พรอมต์เต็ม (สำหรับก็อปไปใช้เองใน Google Flow)</p>
+        <p className="text-sm font-semibold text-gray-100">พรอมต์เต็ม (สำหรับก็อปไปใช้เองใน {platformName})</p>
         <button
           type="button"
           onClick={handleCopy}
@@ -32,7 +33,7 @@ export default function FullPromptCopyBox({ promptText }: FullPromptCopyBoxProps
         </button>
       </div>
       <p className="text-xs leading-relaxed text-gray-500">
-        ข้อความนี้รวมคำสั่งเสียงพากย์/ข้อความบนภาพ/เพศเสียงไว้ครบแล้ว — ถ้าจะสร้างวิดีโอเองใน Google Flow
+        ข้อความนี้รวมคำสั่งเสียงพากย์/ข้อความบนภาพ/เพศเสียงไว้ครบแล้ว — ถ้าจะสร้างวิดีโอเองใน {platformName}
         (ไม่ผ่านปุ่ม Generate Video ของแอปนี้) ให้ก็อปข้อความทั้งหมดนี้ไปวาง ไม่ใช่แค่ข้อความในกล่อง
         &quot;พรอมต์วิดีโอ&quot; ด้านบน เพราะกล่องด้านบนมีแค่ส่วนอธิบายการเคลื่อนกล้องเท่านั้น
         ไม่มีคำสั่งเสียงพากย์รวมอยู่ด้วย
