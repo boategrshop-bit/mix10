@@ -11,6 +11,7 @@ import VoiceGenderSelector from "@/components/VoiceGenderSelector";
 import VideoTargetSelector from "@/components/VideoTargetSelector";
 import GenerateVideoPanel from "@/components/GenerateVideoPanel";
 import FullPromptCopyBox from "@/components/FullPromptCopyBox";
+import CaptionHashtagBox from "@/components/CaptionHashtagBox";
 import type { ScenePlanItem, VideoJobResult } from "@/lib/types";
 import { composeBrief, type BriefTemplateFields, type VideoTarget, type VoiceGender } from "@/lib/prompt-template";
 import { buildOmniFlashPromptText } from "@/lib/gemini";
@@ -52,6 +53,9 @@ export default function Home() {
   const [imageLoading, setImageLoading] = useState(false);
   const [videoPrompt, setVideoPrompt] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
+  const [caption, setCaption] = useState("");
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [captionLoading, setCaptionLoading] = useState(false);
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("female");
   const [videoTarget, setVideoTarget] = useState<VideoTarget>("omni-flash");
   const [storyboardError, setStoryboardError] = useState<StoryboardError | null>(null);
@@ -116,6 +120,13 @@ export default function Home() {
     if (result.videoPrompt) setVideoPrompt(result.videoPrompt);
   }
 
+  async function requestCaption() {
+    const form = baseForm("caption_only");
+    const result = await postStoryboard(form);
+    setCaption(result.caption ?? "");
+    setHashtags(result.hashtags ?? []);
+  }
+
   async function generateImage() {
     setImageLoading(true);
     setStoryboardError(null);
@@ -131,6 +142,14 @@ export default function Home() {
         await requestVideoPrompt(result.storyboardImageBase64);
       } catch {
         // non-fatal; user can still fill/regenerate the video prompt manually
+      }
+      setCaptionLoading(true);
+      try {
+        await requestCaption();
+      } catch {
+        // non-fatal; user can still regenerate the caption manually
+      } finally {
+        setCaptionLoading(false);
       }
     } catch (err) {
       setStoryboardError(err as StoryboardError);
@@ -148,6 +167,17 @@ export default function Home() {
       // keep existing prompt on failure; the storyboard error banner covers other failures
     } finally {
       setPromptLoading(false);
+    }
+  }
+
+  async function handleRegenerateCaption() {
+    setCaptionLoading(true);
+    try {
+      await requestCaption();
+    } catch {
+      // keep existing caption on failure
+    } finally {
+      setCaptionLoading(false);
     }
   }
 
@@ -182,6 +212,8 @@ export default function Home() {
     setScenePlan([]);
     setStoryboardImage(null);
     setVideoPrompt("");
+    setCaption("");
+    setHashtags([]);
     setStoryboardError(null);
     setScenePlanDirty(false);
   }
@@ -276,6 +308,15 @@ export default function Home() {
           loading={promptLoading}
           onChange={setVideoPrompt}
           onRegenerate={handleRegeneratePrompt}
+        />
+      )}
+
+      {(imageLoading || storyboardImage) && (
+        <CaptionHashtagBox
+          caption={caption}
+          hashtags={hashtags}
+          loading={captionLoading}
+          onRegenerate={handleRegenerateCaption}
         />
       )}
 

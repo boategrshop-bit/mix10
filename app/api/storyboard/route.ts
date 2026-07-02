@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callChatPrompt, callImageEdit, callScenePlan, OpenAIApiError, type RawScenePlanItem } from "@/lib/openai";
+import {
+  callCaptionAndHashtags,
+  callChatPrompt,
+  callImageEdit,
+  callScenePlan,
+  OpenAIApiError,
+  type RawScenePlanItem,
+} from "@/lib/openai";
 import { validateApiKeyFormat, validateBrief, validateImageFile, validateSceneCount } from "@/lib/validation";
 import { deriveSceneCount, deriveSceneRanges, deriveSheetSize, PRESERVE_IDENTITY_INSTRUCTION, type SceneRange } from "@/lib/prompt-template";
 import type { ApiErrorBody, ScenePlanItem } from "@/lib/types";
 
-const VALID_MODES = ["full", "plan_only", "image_only", "prompt_only"] as const;
+const VALID_MODES = ["full", "plan_only", "image_only", "prompt_only", "caption_only"] as const;
 type Mode = (typeof VALID_MODES)[number];
 
 function errorResponse(code: string, message: string, status: number, details?: string) {
@@ -76,6 +83,15 @@ export async function POST(request: NextRequest) {
     try {
       const videoPrompt = await callChatPrompt(apiKey, brief, storyboardImageBase64);
       return NextResponse.json({ videoPrompt });
+    } catch (err) {
+      return handleOpenAIError(err);
+    }
+  }
+
+  if (mode === "caption_only") {
+    try {
+      const result = await callCaptionAndHashtags(apiKey, brief);
+      return NextResponse.json(result);
     } catch (err) {
       return handleOpenAIError(err);
     }

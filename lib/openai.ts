@@ -225,3 +225,63 @@ export async function callChatPrompt(
   }
   return content as string;
 }
+
+export interface CaptionAndHashtags {
+  caption: string;
+  hashtags: string[];
+}
+
+export async function callCaptionAndHashtags(apiKey: string, brief: string): Promise<CaptionAndHashtags> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      temperature: 0.8,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You write social media captions and hashtags for short marketing videos, ready for a " +
+            "seller to paste directly onto TikTok/Facebook/Instagram. Given a marketing brief, output " +
+            'strict JSON of the shape {"caption":string,"hashtags":string[]}. caption must be in Thai, ' +
+            "2-4 sentences, engaging and sales-oriented, may include relevant emoji, and end with a " +
+            "clear call-to-action. hashtags must be an array of 8-12 relevant hashtags (mix of Thai " +
+            "and English as appropriate), each string starting with # and containing no spaces. " +
+            "Output only the JSON object, no markdown.",
+        },
+        {
+          role: "user",
+          content: `Brief: ${brief}`,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw await parseOpenAIError(response);
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new OpenAIApiError("OpenAI did not return a caption.", 500);
+  }
+
+  let parsed: Partial<CaptionAndHashtags>;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new OpenAIApiError("OpenAI returned an invalid caption response.", 500);
+  }
+
+  if (typeof parsed.caption !== "string" || !Array.isArray(parsed.hashtags)) {
+    throw new OpenAIApiError("OpenAI returned an incomplete caption response.", 500);
+  }
+
+  return { caption: parsed.caption, hashtags: parsed.hashtags };
+}
