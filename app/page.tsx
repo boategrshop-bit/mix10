@@ -190,7 +190,7 @@ export default function Home() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-10 sm:px-6">
       <div className="mb-2 space-y-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="MIX10" className="h-10 w-auto" />
+        <img src="/logo.png" alt="MIX10" className="w-full max-w-none" />
         <h1 className="bg-gradient-to-r from-[#7bafdb] to-[#4382BB] bg-clip-text text-3xl font-bold text-transparent">
           สร้างสตอรี่บอร์ดและวิดีโอโฆษณาอัตโนมัติ
         </h1>
