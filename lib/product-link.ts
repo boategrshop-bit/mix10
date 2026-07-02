@@ -2,6 +2,10 @@ import { ALLOWED_IMAGE_TYPES } from "./validation";
 
 export class ProductLinkError extends Error {}
 
+const MANUAL_UPLOAD_HINT =
+  "ดึงรูปอัตโนมัติไม่สำเร็จ (บางเว็บ เช่น Shopee/TikTok Shop กันบอทไว้แน่นมาก) — " +
+  'กรุณาแคปหน้าจอ หรือคลิกขวาที่รูปสินค้าแล้วเลือก "บันทึกรูปภาพเป็น..." แล้วอัปโหลดไฟล์นั้นแทน';
+
 const FETCH_TIMEOUT_MS = 10_000;
 const BROWSER_HEADERS = {
   "User-Agent":
@@ -71,23 +75,23 @@ export async function fetchProductImageFromUrl(pageUrl: string): Promise<Product
   try {
     pageResponse = await fetchWithTimeout(parsedPageUrl.toString(), BROWSER_HEADERS);
   } catch {
-    throw new ProductLinkError("เข้าถึงลิงก์นี้ไม่ได้ เว็บอาจบล็อกการเข้าถึงอัตโนมัติ กรุณาอัปโหลดรูปเอง");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
   if (!pageResponse.ok) {
-    throw new ProductLinkError("เข้าถึงลิงก์นี้ไม่ได้ เว็บอาจบล็อกการเข้าถึงอัตโนมัติ กรุณาอัปโหลดรูปเอง");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
 
   const html = await pageResponse.text();
   const imageUrlRaw = extractMetaImage(html);
   if (!imageUrlRaw) {
-    throw new ProductLinkError("หารูปสินค้าจากลิงก์นี้ไม่เจอ กรุณาอัปโหลดรูปเอง");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
 
   let parsedImageUrl: URL;
   try {
     parsedImageUrl = new URL(imageUrlRaw, parsedPageUrl);
   } catch {
-    throw new ProductLinkError("หารูปสินค้าจากลิงก์นี้ไม่เจอ กรุณาอัปโหลดรูปเอง");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
   assertPublicHttpUrl(parsedImageUrl);
 
@@ -95,15 +99,15 @@ export async function fetchProductImageFromUrl(pageUrl: string): Promise<Product
   try {
     imageResponse = await fetchWithTimeout(parsedImageUrl.toString(), BROWSER_HEADERS);
   } catch {
-    throw new ProductLinkError("ดึงรูปสินค้าจากลิงก์นี้ไม่สำเร็จ กรุณาอัปโหลดรูปเอง");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
   if (!imageResponse.ok) {
-    throw new ProductLinkError("ดึงรูปสินค้าจากลิงก์นี้ไม่สำเร็จ กรุณาอัปโหลดรูปเอง");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
 
   const mimeType = imageResponse.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
   if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
-    throw new ProductLinkError("รูปสินค้าจากลิงก์นี้เป็นไฟล์ที่ไม่รองรับ กรุณาอัปโหลดรูปเอง (PNG/JPEG/WebP)");
+    throw new ProductLinkError(MANUAL_UPLOAD_HINT);
   }
 
   const buffer = Buffer.from(await imageResponse.arrayBuffer());

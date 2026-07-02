@@ -105,22 +105,27 @@ export default function ImageUploader({ label, file, onChange, allowUrlImport = 
         </button>
       )}
       {allowUrlImport && (
-        <div className="flex gap-1.5">
-          <input
-            type="url"
-            value={productUrl}
-            onChange={(e) => setProductUrl(e.target.value)}
-            placeholder="หรือวางลิงก์ Shopee / TikTok Shop"
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#4382BB]/60 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={handleUrlImport}
-            disabled={urlLoading || !productUrl.trim()}
-            className="shrink-0 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs font-medium text-gray-300 transition hover:bg-white/5 disabled:opacity-40"
-          >
-            {urlLoading ? "กำลังดึง..." : "ดึงรูป"}
-          </button>
+        <div className="space-y-1">
+          <div className="flex gap-1.5">
+            <input
+              type="url"
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              placeholder="หรือวางลิงก์หน้าสินค้า"
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-gray-200 placeholder:text-gray-600 focus:border-[#4382BB]/60 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleUrlImport}
+              disabled={urlLoading || !productUrl.trim()}
+              className="shrink-0 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs font-medium text-gray-300 transition hover:bg-white/5 disabled:opacity-40"
+            >
+              {urlLoading ? "กำลังดึง..." : "ดึงรูป"}
+            </button>
+          </div>
+          <p className="text-[11px] leading-snug text-gray-600">
+            ใช้ได้กับบางเว็บเท่านั้น — Shopee/TikTok Shop มักกันบอทไว้ ถ้าดึงไม่ได้ให้แคปหน้าจอหรือเซฟรูปแล้วอัปโหลดแทน
+          </p>
         </div>
       )}
       {error && <p className="text-xs text-red-600">{error}</p>}
