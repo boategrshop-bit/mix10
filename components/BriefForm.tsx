@@ -32,6 +32,39 @@ const SHOT_COUNT_OPTIONS: { value: string; label: string }[] = [
   { value: "8", label: "8 ช็อต" },
 ];
 
+const STYLE_PRESETS: string[] = [
+  "มินิมอล เรียบหรู",
+  "หรูหราพรีเมียม",
+  "พาสเทลนุ่มนวล",
+  "วินเทจย้อนยุค",
+  "ฟิล์มโทนอบอุ่น",
+  "เกาหลีใสๆ",
+  "ญี่ปุ่นมินิมอล",
+  "สตรีทแฟชั่น",
+  "ธรรมชาติออร์แกนิก",
+  "โมเดิร์นดูดี",
+  "คลาสสิกหรูหรา",
+  "สีสันสดใสจัดเต็ม",
+  "ขาวดำอาร์ตี้",
+  "นีออนไซเบอร์",
+  "สปาผ่อนคลาย",
+  "หรูหราทองคำ",
+  "อบอุ่นบ้านๆ",
+  "สตูดิโอมืออาชีพ",
+  "อีคอมเมิร์ซสะอาดตา",
+  "เอาท์ดอร์กลางแจ้ง",
+  "ริมชายหาดหน้าร้อน",
+  "ใบไม้ร่วงโทนอุ่น",
+  "เทศกาลคริสต์มาส",
+  "ป็อปอาร์ตจัดจ้าน",
+  "การ์ตูนน่ารัก",
+  "ไซไฟอนาคต",
+  "ยุโรปคลาสสิก",
+  "Y2K ยุค 2000",
+  "ฝันหวานนุ่มละมุน",
+  "ธุรกิจมืออาชีพ",
+];
+
 export default function BriefForm({
   apiKey,
   modelImage,
@@ -113,10 +146,25 @@ export default function BriefForm({
           </select>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 sm:col-span-2">
           <label className="text-sm font-medium text-gray-300" htmlFor="style">
             สไตล์ภาพ
           </label>
+          <select
+            id="stylePreset"
+            value={STYLE_PRESETS.includes(fields.style) ? fields.style : ""}
+            onChange={(e) => {
+              if (e.target.value) update("style", e.target.value);
+            }}
+            className={`${inputClass} mb-1.5`}
+          >
+            <option value="">-- เลือกสไตล์ด่วน ({STYLE_PRESETS.length} แบบ) หรือพิมพ์เองด้านล่าง --</option>
+            {STYLE_PRESETS.map((preset) => (
+              <option key={preset} value={preset} className="bg-[#0d121c]">
+                {preset}
+              </option>
+            ))}
+          </select>
           <input
             id="style"
             type="text"
