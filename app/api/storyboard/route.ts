@@ -37,7 +37,7 @@ function mergeSceneRanges(items: RawScenePlanItem[], ranges: SceneRange[]): Scen
 function buildStoryboardSheetPrompt(
   brief: string,
   scenePlan: ScenePlanItem[],
-  options: { hasModelImage: boolean; hasProductImage: boolean }
+  options: { modelImageCount: number; hasProductImage: boolean }
 ): string {
   const panelLines = scenePlan
     .map(
@@ -48,20 +48,25 @@ function buildStoryboardSheetPrompt(
     )
     .join("\n");
 
-  const referenceInstruction =
-    options.hasModelImage && options.hasProductImage
-      ? "Use the person from the first reference image and the product from the second reference " +
-        "image consistently across every panel, matching both as closely as possible to the " +
-        "references. "
-      : options.hasModelImage
-        ? "Use the person from the attached reference image consistently across every panel, " +
-          "matching them as closely as possible to the reference. "
-        : options.hasProductImage
-          ? "Use the product from the attached reference image consistently across every panel, " +
-            "matching it as closely as possible to the reference. "
-          : "";
+  const peopleInstruction =
+    options.modelImageCount > 1
+      ? `Use the ${options.modelImageCount} people shown in the first ${options.modelImageCount} reference ` +
+        "images as the recurring cast, keeping each of them visually consistent (same face/identity) " +
+        "across every panel they appear in, matching each as closely as possible to their own " +
+        "reference photo. "
+      : options.modelImageCount === 1
+        ? "Use the person from the first reference image consistently across every panel, matching " +
+          "them as closely as possible to the reference. "
+        : "";
 
-  const identityInstruction = options.hasModelImage || options.hasProductImage ? ` ${PRESERVE_IDENTITY_INSTRUCTION}` : "";
+  const productInstruction = options.hasProductImage
+    ? `Use the product from the ${options.modelImageCount > 0 ? "last" : "attached"} reference image ` +
+      "consistently across every panel, matching it as closely as possible to the reference. "
+    : "";
+
+  const referenceInstruction = peopleInstruction + productInstruction;
+  const hasAnyReference = options.modelImageCount > 0 || options.hasProductImage;
+  const identityInstruction = hasAnyReference ? ` ${PRESERVE_IDENTITY_INSTRUCTION}` : "";
 
   return (
     `Create a single storyboard sheet image for a short video, designed like a premium ad agency's ` +
@@ -84,7 +89,7 @@ export async function POST(request: NextRequest) {
   const apiKey = form.get("apiKey");
   const brief = form.get("brief");
   const modeRaw = form.get("mode");
-  const modelImage = form.get("modelImage");
+  const modelImages = form.getAll("modelImages").filter((v): v is File => v instanceof Blob);
   const productImage = form.get("productImage");
   const mode: Mode = VALID_MODES.includes(modeRaw as Mode) ? (modeRaw as Mode) : "full";
 
@@ -132,10 +137,9 @@ export async function POST(request: NextRequest) {
     } catch {
       return errorResponse("validation_error", "scenePlan must be a non-empty JSON array.", 400);
     }
-    const hasModelImage = modelImage instanceof Blob;
     const hasProductImage = productImage instanceof Blob;
-    if (hasModelImage) {
-      const modelImageError = validateImageFile({ type: (modelImage as Blob).type, size: (modelImage as Blob).size });
+    for (const img of modelImages) {
+      const modelImageError = validateImageFile({ type: img.type, size: img.size });
       if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
     }
     if (hasProductImage) {
@@ -146,9 +150,12 @@ export async function POST(request: NextRequest) {
     try {
       const storyboardImageBase64 = await callImageEdit({
         apiKey,
-        modelImage: hasModelImage ? (modelImage as Blob) : undefined,
+        modelImages,
         productImage: hasProductImage ? (productImage as Blob) : undefined,
-        promptText: buildStoryboardSheetPrompt(brief, scenePlan, { hasModelImage, hasProductImage }),
+        promptText: buildStoryboardSheetPrompt(brief, scenePlan, {
+          modelImageCount: modelImages.length,
+          hasProductImage,
+        }),
         size: deriveSheetSize(scenePlan.length),
       });
       return NextResponse.json({ storyboardImageBase64 });
@@ -204,10 +211,9 @@ export async function POST(request: NextRequest) {
 
   // mode === "full" (single-clip convenience path; not used by the current UI, which
   // always drives the two-step plan_only -> image_only flow)
-  const hasModelImage = modelImage instanceof Blob;
   const hasProductImage = productImage instanceof Blob;
-  if (hasModelImage) {
-    const modelImageError = validateImageFile({ type: (modelImage as Blob).type, size: (modelImage as Blob).size });
+  for (const img of modelImages) {
+    const modelImageError = validateImageFile({ type: img.type, size: img.size });
     if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
   }
 
@@ -225,9 +231,12 @@ export async function POST(request: NextRequest) {
 
     const storyboardImageBase64 = await callImageEdit({
       apiKey,
-      modelImage: hasModelImage ? (modelImage as Blob) : undefined,
+      modelImages,
       productImage: hasProductImage ? (productImage as Blob) : undefined,
-      promptText: buildStoryboardSheetPrompt(brief, scenePlan, { hasModelImage, hasProductImage }),
+      promptText: buildStoryboardSheetPrompt(brief, scenePlan, {
+        modelImageCount: modelImages.length,
+        hasProductImage,
+      }),
       size: deriveSheetSize(scenePlan.length),
     });
 

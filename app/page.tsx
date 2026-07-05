@@ -44,7 +44,7 @@ function setAt<T>(setter: (updater: (prev: T[]) => T[]) => void, index: number, 
 export default function Home() {
   const [apiKey, setApiKey] = useState("");
   const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [modelImage, setModelImage] = useState<File | null>(null);
+  const [modelImages, setModelImages] = useState<File[]>([]);
   const [productImage, setProductImage] = useState<File | null>(null);
   const [fields, setFields] = useState<BriefTemplateFields>(DEFAULT_FIELDS);
   const [customBrief, setCustomBrief] = useState<string | null>(null);
@@ -169,7 +169,7 @@ export default function Home() {
     setAt(setClipErrors, clipIndex, null);
     try {
       const form = baseForm("image_only");
-      if (modelImage) form.append("modelImage", modelImage);
+      modelImages.forEach((img) => form.append("modelImages", img));
       if (productImage) form.append("productImage", productImage);
       form.append("scenePlan", JSON.stringify(clips[clipIndex] ?? []));
       const result = await postStoryboard(form);
@@ -249,7 +249,7 @@ export default function Home() {
     form.append("orientation", fields.orientation);
     if (geminiApiKey) {
       form.append("apiKey", geminiApiKey);
-      if (modelImage) form.append("modelImage", modelImage);
+      if (modelImages[0]) form.append("modelImage", modelImages[0]);
       if (productImage) form.append("productImage", productImage);
     }
 
@@ -262,7 +262,7 @@ export default function Home() {
   }
 
   function handleStartOver() {
-    setModelImage(null);
+    setModelImages([]);
     setProductImage(null);
     setFields(DEFAULT_FIELDS);
     setCustomBrief(null);
@@ -328,14 +328,14 @@ export default function Home() {
 
       <BriefForm
         apiKey={apiKey}
-        modelImage={modelImage}
+        modelImages={modelImages}
         productImage={productImage}
         fields={fields}
         brief={brief}
         briefTouched={briefTouched}
         loading={planLoading}
         creativeMode={creativeMode}
-        onModelImageChange={setModelImage}
+        onModelImagesChange={setModelImages}
         onProductImageChange={setProductImage}
         onFieldsChange={setFields}
         onBriefChange={handleBriefChange}

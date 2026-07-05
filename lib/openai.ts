@@ -52,15 +52,15 @@ async function parseOpenAIError(response: Response): Promise<OpenAIApiError> {
 
 export interface CallImageEditParams {
   apiKey: string;
-  modelImage?: Blob;
+  modelImages?: Blob[];
   productImage?: Blob;
   promptText: string;
   size: string;
 }
 
 export async function callImageEdit(params: CallImageEditParams): Promise<string> {
-  const { apiKey, modelImage, productImage, promptText, size } = params;
-  const references = [modelImage, productImage].filter((img): img is Blob => Boolean(img));
+  const { apiKey, modelImages, productImage, promptText, size } = params;
+  const references = [...(modelImages ?? []), productImage].filter((img): img is Blob => Boolean(img));
 
   let response: Response;
   if (references.length > 0) {
@@ -291,10 +291,11 @@ export async function callChatPrompt(
           role: "system",
           content:
             "You write concise, actionable prompts for an AI video generation model, grounded in " +
-            "an actual storyboard image you are shown. Look closely at the storyboard image's " +
-            "panels, poses, product placement, and on-image captions, then output 2-4 sentences " +
-            "describing camera motion, pacing, and on-screen action that would bring exactly this " +
-            "storyboard to life as a short video, panel by panel in order. No dialogue, no scene " +
+            "an actual storyboard image you are shown. Write the entire output in Thai. Look closely " +
+            "at the storyboard image's panels, poses, product placement, and on-image captions, then " +
+            "output 2-4 Thai sentences describing camera motion, pacing, and on-screen action that " +
+            "would bring exactly this storyboard to life as a short video, panel by panel in order. " +
+            "No dialogue, no scene " +
             "numbers, no markdown, no references to 'the image' or 'the storyboard' itself.",
         },
         {

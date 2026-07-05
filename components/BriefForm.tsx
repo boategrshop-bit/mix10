@@ -1,18 +1,19 @@
 "use client";
 
 import ImageUploader from "./ImageUploader";
+import MultiImageUploader from "./MultiImageUploader";
 import { validateProductName, type BriefTemplateFields, type Orientation } from "@/lib/prompt-template";
 
 interface BriefFormProps {
   apiKey: string;
-  modelImage: File | null;
+  modelImages: File[];
   productImage: File | null;
   fields: BriefTemplateFields;
   brief: string;
   briefTouched: boolean;
   loading: boolean;
   creativeMode: boolean;
-  onModelImageChange: (file: File | null) => void;
+  onModelImagesChange: (files: File[]) => void;
   onProductImageChange: (file: File | null) => void;
   onFieldsChange: (fields: BriefTemplateFields) => void;
   onBriefChange: (value: string) => void;
@@ -75,14 +76,14 @@ const STYLE_PRESETS: string[] = [
 
 export default function BriefForm({
   apiKey,
-  modelImage,
+  modelImages,
   productImage,
   fields,
   brief,
   briefTouched,
   loading,
   creativeMode,
-  onModelImageChange,
+  onModelImagesChange,
   onProductImageChange,
   onFieldsChange,
   onBriefChange,
@@ -92,7 +93,7 @@ export default function BriefForm({
   const productNameError = creativeMode ? null : validateProductName(fields.productName);
   const canSubmit = creativeMode
     ? Boolean(apiKey && brief.trim().length >= 5 && !loading)
-    : Boolean(apiKey && modelImage && productImage && !productNameError && !loading);
+    : Boolean(apiKey && modelImages.length > 0 && productImage && !productNameError && !loading);
 
   function update<K extends keyof BriefTemplateFields>(key: K, value: BriefTemplateFields[K]) {
     onFieldsChange({ ...fields, [key]: value });
@@ -104,10 +105,10 @@ export default function BriefForm({
   return (
     <div className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm backdrop-blur-sm">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ImageUploader
-          label={creativeMode ? "รูปตัวละคร (ถ้ามี, ไม่บังคับ)" : "รูปนางแบบ"}
-          file={modelImage}
-          onChange={onModelImageChange}
+        <MultiImageUploader
+          label={creativeMode ? "รูปตัวละคร (ถ้ามี, ไม่บังคับ)" : "รูปนางแบบ (เพิ่มได้หลายคน)"}
+          files={modelImages}
+          onChange={onModelImagesChange}
         />
         {!creativeMode && (
           <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} allowUrlImport />
