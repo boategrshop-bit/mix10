@@ -120,21 +120,28 @@ export async function callScenePlan(
         {
           role: "system",
           content:
-            "You plan storyboards for short marketing videos. Given a brief and a per-scene time " +
-            "budget, output strict JSON of the shape " +
-            '{"scenes":[{"index":number,"visualDescription":string,"onScreenText":string,' +
-            '"voiceoverLine":string}]}. You must output exactly the requested number of scenes, ' +
-            "indexed 0 to count-1, covering the full duration in order. visualDescription must be " +
-            "in English, describing a single pose/action for a photorealistic reference photo " +
-            "featuring the same recurring person and product across all scenes (varying only the " +
-            "pose/action/setting) - do not describe any on-image text in it. onScreenText must be " +
-            "a short Thai caption for that scene, under 60 characters. voiceoverLine must be one " +
-            "Thai voiceover sentence for that scene, paced to be naturally speakable within that " +
-            "scene's time slot - strictly respect the max word count given per scene below so the " +
-            "narration timing feels natural, never rushed or cut off. The LAST scene's onScreenText " +
-            "and voiceoverLine must both include a strong Thai call-to-action (CTA) urging the " +
-            "viewer to buy/click immediately, using natural Thai livestream/TikTok sales phrasing " +
-            "such as ปักพิกัดให้แล้ว, " +
+            "You are an art director planning storyboards for short, visually polished marketing " +
+            "videos. Given a brief and a per-scene time budget, output strict JSON of the shape " +
+            '{"scenes":[{"index":number,"visualDescription":string,"shotType":string,' +
+            '"onScreenText":string,"voiceoverLine":string}]}. You must output exactly the requested ' +
+            "number of scenes, indexed 0 to count-1, covering the full duration in order. " +
+            "shotType must be a short English phrase naming the camera framing for that scene " +
+            "(e.g. 'wide establishing shot', 'medium shot', 'close-up', 'over-the-shoulder', " +
+            "'flat-lay product shot', 'low-angle hero shot', 'macro detail shot'), chosen to fit " +
+            "that beat of the story and varied meaningfully scene-to-scene (do not repeat the same " +
+            "shotType back-to-back unless the brief clearly calls for it) so the finished video " +
+            "feels dynamically shot rather than static. visualDescription must be in English, " +
+            "richly describing a single photorealistic pose/action/moment for a reference photo - " +
+            "cover the framing implied by shotType, the setting/background, lighting mood, and any " +
+            "styling detail relevant to the brief - featuring the same recurring person and product " +
+            "across all scenes (varying only the pose/action/setting/framing) - do not describe any " +
+            "on-image text in it. onScreenText must be a short Thai caption for that scene, under 60 " +
+            "characters. voiceoverLine must be one Thai voiceover sentence for that scene, paced to " +
+            "be naturally speakable within that scene's time slot - strictly respect the max word " +
+            "count given per scene below so the narration timing feels natural, never rushed or cut " +
+            "off. The LAST scene's onScreenText and voiceoverLine must both include a strong Thai " +
+            "call-to-action (CTA) urging the viewer to buy/click immediately, using natural Thai " +
+            "livestream/TikTok sales phrasing such as ปักพิกัดให้แล้ว, " +
             "กดตะกร้าได้เลย, " +
             "ปักลิ้งให้แล้ว, " +
             "รีบไปตำ, or รีบไปกด " +

@@ -39,9 +39,16 @@ export default function ScenePlanEditor({
 
           return (
             <div key={scene.index} className="space-y-2.5 rounded-xl border border-white/10 bg-black/20 p-3.5">
-              <span className="inline-block rounded-full bg-gradient-to-r from-[#5a9bd4] to-[#4382BB] px-2.5 py-0.5 text-xs font-semibold text-white">
-                {scene.startSeconds}s–{scene.endSeconds}s
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-block rounded-full bg-gradient-to-r from-[#5a9bd4] to-[#4382BB] px-2.5 py-0.5 text-xs font-semibold text-white">
+                  {scene.startSeconds}s–{scene.endSeconds}s
+                </span>
+                {scene.shotType && (
+                  <span className="inline-block rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs text-gray-400">
+                    {scene.shotType}
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-500">ข้อความบนภาพ</label>

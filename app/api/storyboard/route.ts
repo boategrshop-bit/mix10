@@ -38,20 +38,26 @@ function buildStoryboardSheetPrompt(brief: string, scenePlan: ScenePlanItem[]): 
   const panelLines = scenePlan
     .map(
       (s) =>
-        `Panel ${s.index + 1} (${s.startSeconds}s-${s.endSeconds}s): show ${s.visualDescription}. ` +
-        `Bold on-image caption text for this panel, rendered exactly as: "${s.onScreenText}".`
+        `Panel ${s.index + 1} (${s.startSeconds}s-${s.endSeconds}s, ${s.shotType}): show ` +
+        `${s.visualDescription}. Bold on-image caption text for this panel, rendered exactly as: ` +
+        `"${s.onScreenText}".`
     )
     .join("\n");
 
   return (
-    `Create a single storyboard sheet image for a marketing video. Context: ${brief}. ` +
-    `Stack ${scenePlan.length} panels vertically in one image, each panel clearly separated ` +
-    `(card-style framing, consistent spacing), each showing a visible time-range label and ` +
-    `the described photo with its caption text baked into the image:\n${panelLines}\n` +
+    `Create a single storyboard sheet image for a marketing video, designed like a premium ad ` +
+    `agency's shot-list deck. Context: ${brief}. Stack ${scenePlan.length} panels vertically in ` +
+    `one image, each panel clearly separated with card-style framing (subtle border, soft drop ` +
+    `shadow, consistent rounded corners and spacing), each labeled with a small numbered badge and ` +
+    `its time-range, and each showing the described photo shot exactly as specified by its shot ` +
+    `type (framing/angle) with its caption text baked into the image:\n${panelLines}\n` +
     `Use the person from the first reference image and the product from the second reference ` +
     `image consistently across every panel, matching both as closely as possible to the ` +
-    `references. Clean modern layout, readable typography, product/brand-safe composition. ` +
-    `${PRESERVE_IDENTITY_INSTRUCTION}`
+    `references. Keep a cohesive color grade, lighting mood, and background styling across all ` +
+    `panels so the sheet reads as one unified visual story, not disconnected photos. Add a clean ` +
+    `title header at the top and subtle footer branding space. Clean modern layout, elegant ` +
+    `readable typography, generous whitespace, product/brand-safe composition, polished ` +
+    `high-resolution photography look. ${PRESERVE_IDENTITY_INSTRUCTION}`
   );
 }
 
@@ -133,10 +139,12 @@ export async function POST(request: NextRequest) {
 
   // mode is "full" or "plan_only" from here on - both need duration/scene count.
   const durationSeconds = Number(form.get("durationSeconds")) || 10;
-  const sceneCount = deriveSceneCount(durationSeconds);
+  const explicitSceneCountRaw = form.get("sceneCount");
+  const explicitSceneCount = explicitSceneCountRaw ? Number(explicitSceneCountRaw) : undefined;
+  const sceneCount = deriveSceneCount(durationSeconds, explicitSceneCount);
   const sceneCountError = validateSceneCount(sceneCount);
   if (sceneCountError) return errorResponse("validation_error", sceneCountError, 400);
-  const sceneRanges = deriveSceneRanges(durationSeconds);
+  const sceneRanges = deriveSceneRanges(durationSeconds, explicitSceneCount);
 
   if (mode === "plan_only") {
     try {

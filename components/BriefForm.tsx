@@ -25,6 +25,13 @@ const ORIENTATION_OPTIONS: { value: Orientation; label: string }[] = [
   { value: "square", label: "จัตุรัส (1:1)" },
 ];
 
+const SHOT_COUNT_OPTIONS: { value: string; label: string }[] = [
+  { value: "auto", label: "อัตโนมัติ (ตามความยาววิดีโอ)" },
+  { value: "3", label: "3 ช็อต" },
+  { value: "5", label: "5 ช็อต" },
+  { value: "8", label: "8 ช็อต" },
+];
+
 export default function BriefForm({
   apiKey,
   modelImage,
@@ -118,6 +125,24 @@ export default function BriefForm({
             placeholder="เช่น มินิมอล หรูหรา พาสเทล"
             className={inputClass}
           />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-gray-300" htmlFor="shotCount">
+            จำนวนช็อต
+          </label>
+          <select
+            id="shotCount"
+            value={fields.shotCount ? String(fields.shotCount) : "auto"}
+            onChange={(e) => update("shotCount", e.target.value === "auto" ? null : Number(e.target.value))}
+            className={inputClass}
+          >
+            {SHOT_COUNT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-[#0d121c]">
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

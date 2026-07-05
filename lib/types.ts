@@ -5,6 +5,7 @@ export interface ScenePlanItem {
   startSeconds: number;
   endSeconds: number;
   visualDescription: string;
+  shotType: string;
   onScreenText: string;
   voiceoverLine: string;
 }

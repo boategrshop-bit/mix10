@@ -7,6 +7,7 @@ export interface BriefTemplateFields {
   durationSeconds: number;
   orientation: Orientation;
   style: string;
+  shotCount: number | null; // null = derive automatically from durationSeconds
 }
 
 const ORIENTATION_LABEL_TH: Record<Orientation, string> = {
@@ -56,18 +57,19 @@ export interface SceneRange {
 
 const SCENE_CHUNK_SECONDS = 2;
 
-export function deriveSceneCount(durationSeconds: number): number {
+export function deriveSceneCount(durationSeconds: number, explicitSceneCount?: number | null): number {
+  if (explicitSceneCount && explicitSceneCount > 0) return Math.round(explicitSceneCount);
   const safeDuration = durationSeconds > 0 ? durationSeconds : 10;
   return Math.max(1, Math.round(safeDuration / SCENE_CHUNK_SECONDS));
 }
 
-export function deriveSceneRanges(durationSeconds: number): SceneRange[] {
+export function deriveSceneRanges(durationSeconds: number, explicitSceneCount?: number | null): SceneRange[] {
   const safeDuration = durationSeconds > 0 ? durationSeconds : 10;
-  const count = deriveSceneCount(safeDuration);
+  const count = deriveSceneCount(safeDuration, explicitSceneCount);
   const ranges: SceneRange[] = [];
   for (let i = 0; i < count; i++) {
-    const start = i * SCENE_CHUNK_SECONDS;
-    const end = i === count - 1 ? safeDuration : Math.min(safeDuration, start + SCENE_CHUNK_SECONDS);
+    const start = Math.round((i * safeDuration) / count);
+    const end = i === count - 1 ? safeDuration : Math.round(((i + 1) * safeDuration) / count);
     ranges.push({ index: i, startSeconds: start, endSeconds: end });
   }
   return ranges;

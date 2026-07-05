@@ -27,6 +27,7 @@ const DEFAULT_FIELDS: BriefTemplateFields = {
   durationSeconds: 10,
   orientation: "vertical",
   style: "",
+  shotCount: null,
 };
 
 export default function Home() {
@@ -71,6 +72,7 @@ export default function Home() {
     form.append("brief", brief);
     form.append("mode", mode);
     form.append("durationSeconds", String(fields.durationSeconds));
+    if (fields.shotCount) form.append("sceneCount", String(fields.shotCount));
     return form;
   }
 
