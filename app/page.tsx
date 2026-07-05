@@ -5,7 +5,6 @@ import ApiKeyInput from "@/components/ApiKeyInput";
 import BriefForm from "@/components/BriefForm";
 import ErrorBanner from "@/components/ErrorBanner";
 import ProductAnalysisBox from "@/components/ProductAnalysisBox";
-import ClipTabs from "@/components/ClipTabs";
 import ScenePlanEditor from "@/components/ScenePlanEditor";
 import StoryboardSheetPreview from "@/components/StoryboardSheetPreview";
 import VideoPromptEditor from "@/components/VideoPromptEditor";
@@ -60,35 +59,25 @@ export default function Home() {
   }
 
   // Each array below is indexed by clip; a "campaign" is 1-4 clips telling one
-  // continuous story, planned together in a single call and generated one clip at a time.
+  // continuous story, planned together in a single call. Every clip's storyboard,
+  // prompt, caption, and video are shown stacked together (no tab-switching).
   const [clips, setClips] = useState<ScenePlanItem[][]>([]);
-  const [activeClipIndex, setActiveClipIndex] = useState(0);
   const [productAnalysis, setProductAnalysis] = useState("");
   const [storyboardImages, setStoryboardImages] = useState<(string | null)[]>([]);
   const [videoPrompts, setVideoPrompts] = useState<string[]>([]);
   const [captions, setCaptions] = useState<string[]>([]);
   const [hashtagsList, setHashtagsList] = useState<string[][]>([]);
   const [scenePlanDirtyFlags, setScenePlanDirtyFlags] = useState<boolean[]>([]);
-  const [videoCompletedFlags, setVideoCompletedFlags] = useState<boolean[]>([]);
+  const [imageLoadingFlags, setImageLoadingFlags] = useState<boolean[]>([]);
+  const [promptLoadingFlags, setPromptLoadingFlags] = useState<boolean[]>([]);
+  const [captionLoadingFlags, setCaptionLoadingFlags] = useState<boolean[]>([]);
+  const [clipErrors, setClipErrors] = useState<(StoryboardError | null)[]>([]);
 
   const [planLoading, setPlanLoading] = useState(false);
-  const [imageLoading, setImageLoading] = useState(false);
-  const [promptLoading, setPromptLoading] = useState(false);
-  const [captionLoading, setCaptionLoading] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("female");
   const [videoTarget, setVideoTarget] = useState<VideoTarget>("omni-flash");
   const [storyboardError, setStoryboardError] = useState<StoryboardError | null>(null);
-
-  const scenePlan = clips[activeClipIndex] ?? [];
-  const storyboardImage = storyboardImages[activeClipIndex] ?? null;
-  const videoPrompt = videoPrompts[activeClipIndex] ?? "";
-  const caption = captions[activeClipIndex] ?? "";
-  const hashtags = hashtagsList[activeClipIndex] ?? [];
-  const scenePlanDirty = scenePlanDirtyFlags[activeClipIndex] ?? false;
-
-  const narrationScript = scenePlan.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] ${s.voiceoverLine}`).join(" ");
-  const captionScript = scenePlan.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
-  const fullVideoPromptText = buildOmniFlashPromptText({ videoPrompt, narrationScript, captionScript, voiceGender });
 
   function baseForm(mode: string) {
     const form = new FormData();
@@ -129,8 +118,10 @@ export default function Home() {
       setCaptions(newClips.map(() => ""));
       setHashtagsList(newClips.map(() => []));
       setScenePlanDirtyFlags(newClips.map(() => false));
-      setVideoCompletedFlags(newClips.map(() => false));
-      setActiveClipIndex(0);
+      setImageLoadingFlags(newClips.map(() => false));
+      setPromptLoadingFlags(newClips.map(() => false));
+      setCaptionLoadingFlags(newClips.map(() => false));
+      setClipErrors(newClips.map(() => null));
     } catch (err) {
       setStoryboardError(err as StoryboardError);
     } finally {
@@ -138,100 +129,114 @@ export default function Home() {
     }
   }
 
-  function handleCaptionChange(index: number, value: string) {
+  function handleCaptionChange(clipIndex: number, sceneIndex: number, value: string) {
     setClips((prev) => {
       const next = [...prev];
-      next[activeClipIndex] = next[activeClipIndex].map((s) =>
-        s.index === index ? { ...s, onScreenText: value } : s
-      );
+      next[clipIndex] = next[clipIndex].map((s) => (s.index === sceneIndex ? { ...s, onScreenText: value } : s));
       return next;
     });
-    if (storyboardImage) setAt(setScenePlanDirtyFlags, activeClipIndex, true);
+    if (storyboardImages[clipIndex]) setAt(setScenePlanDirtyFlags, clipIndex, true);
   }
 
-  function handleVoiceoverChange(index: number, value: string) {
+  function handleVoiceoverChange(clipIndex: number, sceneIndex: number, value: string) {
     setClips((prev) => {
       const next = [...prev];
-      next[activeClipIndex] = next[activeClipIndex].map((s) =>
-        s.index === index ? { ...s, voiceoverLine: value } : s
-      );
+      next[clipIndex] = next[clipIndex].map((s) => (s.index === sceneIndex ? { ...s, voiceoverLine: value } : s));
       return next;
     });
-    if (storyboardImage) setAt(setScenePlanDirtyFlags, activeClipIndex, true);
+    if (storyboardImages[clipIndex]) setAt(setScenePlanDirtyFlags, clipIndex, true);
   }
 
-  async function requestVideoPrompt(imageBase64: string) {
+  async function requestVideoPrompt(clipIndex: number, imageBase64: string) {
     const form = baseForm("prompt_only");
     form.append("storyboardImageBase64", imageBase64);
     const result = await postStoryboard(form);
-    if (result.videoPrompt) setAt(setVideoPrompts, activeClipIndex, result.videoPrompt);
+    if (result.videoPrompt) setAt(setVideoPrompts, clipIndex, result.videoPrompt);
   }
 
-  async function requestCaption() {
+  async function requestCaption(clipIndex: number) {
     const form = baseForm("caption_only");
     const result = await postStoryboard(form);
-    setAt(setCaptions, activeClipIndex, result.caption ?? "");
-    setAt(setHashtagsList, activeClipIndex, result.hashtags ?? []);
+    setAt(setCaptions, clipIndex, result.caption ?? "");
+    setAt(setHashtagsList, clipIndex, result.hashtags ?? []);
   }
 
-  async function generateImage() {
-    setImageLoading(true);
-    setStoryboardError(null);
+  async function generateOneClipImage(clipIndex: number) {
+    setAt(setImageLoadingFlags, clipIndex, true);
+    setAt(setClipErrors, clipIndex, null);
     try {
       const form = baseForm("image_only");
       if (modelImage) form.append("modelImage", modelImage);
       if (productImage) form.append("productImage", productImage);
-      form.append("scenePlan", JSON.stringify(clips[activeClipIndex] ?? []));
+      form.append("scenePlan", JSON.stringify(clips[clipIndex] ?? []));
       const result = await postStoryboard(form);
-      setAt(setStoryboardImages, activeClipIndex, result.storyboardImageBase64);
-      setAt(setScenePlanDirtyFlags, activeClipIndex, false);
+      setAt(setStoryboardImages, clipIndex, result.storyboardImageBase64);
+      setAt(setScenePlanDirtyFlags, clipIndex, false);
+      setAt(setImageLoadingFlags, clipIndex, false);
+
+      setAt(setPromptLoadingFlags, clipIndex, true);
       try {
-        await requestVideoPrompt(result.storyboardImageBase64);
+        await requestVideoPrompt(clipIndex, result.storyboardImageBase64);
       } catch {
         // non-fatal; user can still fill/regenerate the video prompt manually
+      } finally {
+        setAt(setPromptLoadingFlags, clipIndex, false);
       }
-      setCaptionLoading(true);
+
+      setAt(setCaptionLoadingFlags, clipIndex, true);
       try {
-        await requestCaption();
+        await requestCaption(clipIndex);
       } catch {
         // non-fatal; user can still regenerate the caption manually
       } finally {
-        setCaptionLoading(false);
+        setAt(setCaptionLoadingFlags, clipIndex, false);
       }
     } catch (err) {
-      setStoryboardError(err as StoryboardError);
-    } finally {
-      setImageLoading(false);
+      setAt(setImageLoadingFlags, clipIndex, false);
+      setAt(setClipErrors, clipIndex, err as StoryboardError);
     }
   }
 
-  async function handleRegeneratePrompt() {
-    if (!storyboardImage) return;
-    setPromptLoading(true);
+  async function generateAllImages() {
+    setBatchGenerating(true);
+    for (let i = 0; i < clips.length; i++) {
+      await generateOneClipImage(i);
+    }
+    setBatchGenerating(false);
+  }
+
+  async function handleRegeneratePrompt(clipIndex: number) {
+    const image = storyboardImages[clipIndex];
+    if (!image) return;
+    setAt(setPromptLoadingFlags, clipIndex, true);
     try {
-      await requestVideoPrompt(storyboardImage);
+      await requestVideoPrompt(clipIndex, image);
     } catch {
-      // keep existing prompt on failure; the storyboard error banner covers other failures
+      // keep existing prompt on failure
     } finally {
-      setPromptLoading(false);
+      setAt(setPromptLoadingFlags, clipIndex, false);
     }
   }
 
-  async function handleRegenerateCaption() {
-    setCaptionLoading(true);
+  async function handleRegenerateCaption(clipIndex: number) {
+    setAt(setCaptionLoadingFlags, clipIndex, true);
     try {
-      await requestCaption();
+      await requestCaption(clipIndex);
     } catch {
       // keep existing caption on failure
     } finally {
-      setCaptionLoading(false);
+      setAt(setCaptionLoadingFlags, clipIndex, false);
     }
   }
 
-  async function handleGenerateVideo(): Promise<VideoJobResult> {
+  async function handleGenerateVideo(clipIndex: number): Promise<VideoJobResult> {
+    const scenePlanForClip = clips[clipIndex] ?? [];
+    const narrationScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] ${s.voiceoverLine}`).join(" ");
+    const captionScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
+
     const form = new FormData();
-    form.append("storyboardImageBase64", storyboardImage ?? "");
-    form.append("videoPrompt", videoPrompt);
+    form.append("storyboardImageBase64", storyboardImages[clipIndex] ?? "");
+    form.append("videoPrompt", videoPrompts[clipIndex] ?? "");
     if (narrationScript) form.append("narrationScript", narrationScript);
     if (captionScript) form.append("captionScript", captionScript);
     form.append("voiceGender", voiceGender);
@@ -248,7 +253,6 @@ export default function Home() {
     if (!response.ok) {
       throw new Error(data?.error?.message ?? "Could not generate video. Please try again.");
     }
-    setAt(setVideoCompletedFlags, activeClipIndex, true);
     return data as VideoJobResult;
   }
 
@@ -258,16 +262,20 @@ export default function Home() {
     setFields(DEFAULT_FIELDS);
     setCustomBrief(null);
     setClips([]);
-    setActiveClipIndex(0);
     setProductAnalysis("");
     setStoryboardImages([]);
     setVideoPrompts([]);
     setCaptions([]);
     setHashtagsList([]);
     setScenePlanDirtyFlags([]);
-    setVideoCompletedFlags([]);
+    setImageLoadingFlags([]);
+    setPromptLoadingFlags([]);
+    setCaptionLoadingFlags([]);
+    setClipErrors([]);
     setStoryboardError(null);
   }
+
+  const anyImageGenerated = storyboardImages.some(Boolean);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-10 sm:px-6">
@@ -335,73 +343,91 @@ export default function Home() {
 
       {clips.length > 0 && <ProductAnalysisBox analysis={productAnalysis} />}
 
+      {clips.map((scenePlanForClip, i) => (
+        <div key={`plan-${i}`} className="space-y-2">
+          {clips.length > 1 && <p className="text-sm font-semibold text-[#7bafdb]">คลิปที่ {i + 1}</p>}
+          <ScenePlanEditor
+            scenePlan={scenePlanForClip}
+            loading={imageLoadingFlags[i] ?? false}
+            dirty={scenePlanDirtyFlags[i] ?? false}
+            onCaptionChange={(sceneIndex, value) => handleCaptionChange(i, sceneIndex, value)}
+            onVoiceoverChange={(sceneIndex, value) => handleVoiceoverChange(i, sceneIndex, value)}
+            onGenerateImage={() => generateOneClipImage(i)}
+          />
+        </div>
+      ))}
+
       {clips.length > 1 && (
-        <ClipTabs
-          clipCount={clips.length}
-          activeIndex={activeClipIndex}
-          completedFlags={videoCompletedFlags}
-          onSelect={setActiveClipIndex}
-        />
+        <button
+          type="button"
+          onClick={generateAllImages}
+          disabled={batchGenerating}
+          className="w-full rounded-xl bg-gradient-to-r from-[#5a9bd4] to-[#4382BB] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg hover:shadow-[#4382BB]/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+        >
+          {batchGenerating ? "กำลังสร้างภาพทุกคลิป..." : `สร้างภาพสตอรี่บอร์ดทุกคลิป (${clips.length} คลิป)`}
+        </button>
       )}
 
-      {scenePlan.length > 0 && (
-        <ScenePlanEditor
-          scenePlan={scenePlan}
-          loading={imageLoading}
-          dirty={scenePlanDirty}
-          onCaptionChange={handleCaptionChange}
-          onVoiceoverChange={handleVoiceoverChange}
-          onGenerateImage={generateImage}
-        />
-      )}
-
-      {(imageLoading || storyboardImage || (storyboardError && scenePlan.length > 0)) && (
-        <StoryboardSheetPreview
-          imageBase64={storyboardImage}
-          loading={imageLoading}
-          error={scenePlan.length > 0 ? storyboardError : null}
-          onRegenerate={generateImage}
-        />
-      )}
-
-      {storyboardImage && (
-        <VideoPromptEditor
-          prompt={videoPrompt}
-          loading={promptLoading}
-          onChange={(value) => setAt(setVideoPrompts, activeClipIndex, value)}
-          onRegenerate={handleRegeneratePrompt}
-        />
-      )}
-
-      {(imageLoading || storyboardImage) && (
-        <CaptionHashtagBox
-          caption={caption}
-          hashtags={hashtags}
-          loading={captionLoading}
-          onRegenerate={handleRegenerateCaption}
-        />
-      )}
-
-      {storyboardImage && <VoiceGenderSelector value={voiceGender} onChange={setVoiceGender} />}
-
-      {storyboardImage && <VideoTargetSelector value={videoTarget} onChange={setVideoTarget} />}
-
-      {storyboardImage && videoPrompt && (
+      {anyImageGenerated && (
         <>
-          <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Google Flow" />
-          <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Grok" />
+          <VoiceGenderSelector value={voiceGender} onChange={setVoiceGender} />
+          <VideoTargetSelector value={videoTarget} onChange={setVideoTarget} />
         </>
       )}
 
-      {storyboardImage && (
-        <GenerateVideoPanel
-          key={activeClipIndex}
-          canGenerate={Boolean(storyboardImage && videoPrompt)}
-          orientation={fields.orientation}
-          onGenerate={handleGenerateVideo}
-          onStartOver={handleStartOver}
-        />
-      )}
+      {clips.map((scenePlanForClip, i) => {
+        const image = storyboardImages[i] ?? null;
+        const imgLoading = imageLoadingFlags[i] ?? false;
+        const clipError = clipErrors[i] ?? null;
+        if (!(image || imgLoading || clipError)) return null;
+
+        const videoPrompt = videoPrompts[i] ?? "";
+        const narrationScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] ${s.voiceoverLine}`).join(" ");
+        const captionScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
+        const fullVideoPromptText = buildOmniFlashPromptText({ videoPrompt, narrationScript, captionScript, voiceGender });
+
+        return (
+          <div key={`result-${i}`} className="space-y-3">
+            {clips.length > 1 && <p className="text-sm font-semibold text-[#7bafdb]">คลิปที่ {i + 1}</p>}
+            <StoryboardSheetPreview
+              imageBase64={image}
+              loading={imgLoading}
+              error={clipError}
+              onRegenerate={() => generateOneClipImage(i)}
+            />
+            {image && (
+              <VideoPromptEditor
+                prompt={videoPrompt}
+                loading={promptLoadingFlags[i] ?? false}
+                onChange={(value) => setAt(setVideoPrompts, i, value)}
+                onRegenerate={() => handleRegeneratePrompt(i)}
+              />
+            )}
+            {(imgLoading || image) && (
+              <CaptionHashtagBox
+                caption={captions[i] ?? ""}
+                hashtags={hashtagsList[i] ?? []}
+                loading={captionLoadingFlags[i] ?? false}
+                onRegenerate={() => handleRegenerateCaption(i)}
+              />
+            )}
+            {image && videoPrompt && (
+              <>
+                <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Google Flow" />
+                <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Grok" />
+              </>
+            )}
+            {image && (
+              <GenerateVideoPanel
+                canGenerate={Boolean(image && videoPrompt)}
+                orientation={fields.orientation}
+                onGenerate={() => handleGenerateVideo(i)}
+                onStartOver={handleStartOver}
+              />
+            )}
+          </div>
+        );
+      })}
     </main>
   );
 }
