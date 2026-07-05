@@ -4,6 +4,8 @@ import { useState } from "react";
 import ApiKeyInput from "@/components/ApiKeyInput";
 import BriefForm from "@/components/BriefForm";
 import ErrorBanner from "@/components/ErrorBanner";
+import ProductAnalysisBox from "@/components/ProductAnalysisBox";
+import ClipTabs from "@/components/ClipTabs";
 import ScenePlanEditor from "@/components/ScenePlanEditor";
 import StoryboardSheetPreview from "@/components/StoryboardSheetPreview";
 import VideoPromptEditor from "@/components/VideoPromptEditor";
@@ -28,7 +30,16 @@ const DEFAULT_FIELDS: BriefTemplateFields = {
   orientation: "vertical",
   style: "",
   shotCount: null,
+  clipCount: 1,
 };
+
+function setAt<T>(setter: (updater: (prev: T[]) => T[]) => void, index: number, value: T) {
+  setter((prev) => {
+    const next = [...prev];
+    next[index] = value;
+    return next;
+  });
+}
 
 export default function Home() {
   const [apiKey, setApiKey] = useState("");
@@ -48,19 +59,32 @@ export default function Home() {
     setCustomBrief(null);
   }
 
-  const [scenePlan, setScenePlan] = useState<ScenePlanItem[]>([]);
-  const [storyboardImage, setStoryboardImage] = useState<string | null>(null);
+  // Each array below is indexed by clip; a "campaign" is 1-4 clips telling one
+  // continuous story, planned together in a single call and generated one clip at a time.
+  const [clips, setClips] = useState<ScenePlanItem[][]>([]);
+  const [activeClipIndex, setActiveClipIndex] = useState(0);
+  const [productAnalysis, setProductAnalysis] = useState("");
+  const [storyboardImages, setStoryboardImages] = useState<(string | null)[]>([]);
+  const [videoPrompts, setVideoPrompts] = useState<string[]>([]);
+  const [captions, setCaptions] = useState<string[]>([]);
+  const [hashtagsList, setHashtagsList] = useState<string[][]>([]);
+  const [scenePlanDirtyFlags, setScenePlanDirtyFlags] = useState<boolean[]>([]);
+  const [videoCompletedFlags, setVideoCompletedFlags] = useState<boolean[]>([]);
+
   const [planLoading, setPlanLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
-  const [videoPrompt, setVideoPrompt] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
-  const [caption, setCaption] = useState("");
-  const [hashtags, setHashtags] = useState<string[]>([]);
   const [captionLoading, setCaptionLoading] = useState(false);
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("female");
   const [videoTarget, setVideoTarget] = useState<VideoTarget>("omni-flash");
   const [storyboardError, setStoryboardError] = useState<StoryboardError | null>(null);
-  const [scenePlanDirty, setScenePlanDirty] = useState(false);
+
+  const scenePlan = clips[activeClipIndex] ?? [];
+  const storyboardImage = storyboardImages[activeClipIndex] ?? null;
+  const videoPrompt = videoPrompts[activeClipIndex] ?? "";
+  const caption = captions[activeClipIndex] ?? "";
+  const hashtags = hashtagsList[activeClipIndex] ?? [];
+  const scenePlanDirty = scenePlanDirtyFlags[activeClipIndex] ?? false;
 
   const narrationScript = scenePlan.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] ${s.voiceoverLine}`).join(" ");
   const captionScript = scenePlan.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
@@ -92,12 +116,21 @@ export default function Home() {
   async function handleGeneratePlan() {
     setPlanLoading(true);
     setStoryboardError(null);
-    setStoryboardImage(null);
     try {
       const form = baseForm("plan_only");
+      form.append("clipCount", String(fields.clipCount));
+      if (productImage) form.append("productImage", productImage);
       const result = await postStoryboard(form);
-      setScenePlan(result.scenePlan ?? []);
-      setScenePlanDirty(false);
+      const newClips: ScenePlanItem[][] = result.clips ?? [];
+      setClips(newClips);
+      setProductAnalysis(result.productAnalysis ?? "");
+      setStoryboardImages(newClips.map(() => null));
+      setVideoPrompts(newClips.map(() => ""));
+      setCaptions(newClips.map(() => ""));
+      setHashtagsList(newClips.map(() => []));
+      setScenePlanDirtyFlags(newClips.map(() => false));
+      setVideoCompletedFlags(newClips.map(() => false));
+      setActiveClipIndex(0);
     } catch (err) {
       setStoryboardError(err as StoryboardError);
     } finally {
@@ -106,27 +139,39 @@ export default function Home() {
   }
 
   function handleCaptionChange(index: number, value: string) {
-    setScenePlan((prev) => prev.map((s) => (s.index === index ? { ...s, onScreenText: value } : s)));
-    if (storyboardImage) setScenePlanDirty(true);
+    setClips((prev) => {
+      const next = [...prev];
+      next[activeClipIndex] = next[activeClipIndex].map((s) =>
+        s.index === index ? { ...s, onScreenText: value } : s
+      );
+      return next;
+    });
+    if (storyboardImage) setAt(setScenePlanDirtyFlags, activeClipIndex, true);
   }
 
   function handleVoiceoverChange(index: number, value: string) {
-    setScenePlan((prev) => prev.map((s) => (s.index === index ? { ...s, voiceoverLine: value } : s)));
-    if (storyboardImage) setScenePlanDirty(true);
+    setClips((prev) => {
+      const next = [...prev];
+      next[activeClipIndex] = next[activeClipIndex].map((s) =>
+        s.index === index ? { ...s, voiceoverLine: value } : s
+      );
+      return next;
+    });
+    if (storyboardImage) setAt(setScenePlanDirtyFlags, activeClipIndex, true);
   }
 
   async function requestVideoPrompt(imageBase64: string) {
     const form = baseForm("prompt_only");
     form.append("storyboardImageBase64", imageBase64);
     const result = await postStoryboard(form);
-    if (result.videoPrompt) setVideoPrompt(result.videoPrompt);
+    if (result.videoPrompt) setAt(setVideoPrompts, activeClipIndex, result.videoPrompt);
   }
 
   async function requestCaption() {
     const form = baseForm("caption_only");
     const result = await postStoryboard(form);
-    setCaption(result.caption ?? "");
-    setHashtags(result.hashtags ?? []);
+    setAt(setCaptions, activeClipIndex, result.caption ?? "");
+    setAt(setHashtagsList, activeClipIndex, result.hashtags ?? []);
   }
 
   async function generateImage() {
@@ -136,10 +181,10 @@ export default function Home() {
       const form = baseForm("image_only");
       if (modelImage) form.append("modelImage", modelImage);
       if (productImage) form.append("productImage", productImage);
-      form.append("scenePlan", JSON.stringify(scenePlan));
+      form.append("scenePlan", JSON.stringify(clips[activeClipIndex] ?? []));
       const result = await postStoryboard(form);
-      setStoryboardImage(result.storyboardImageBase64);
-      setScenePlanDirty(false);
+      setAt(setStoryboardImages, activeClipIndex, result.storyboardImageBase64);
+      setAt(setScenePlanDirtyFlags, activeClipIndex, false);
       try {
         await requestVideoPrompt(result.storyboardImageBase64);
       } catch {
@@ -203,6 +248,7 @@ export default function Home() {
     if (!response.ok) {
       throw new Error(data?.error?.message ?? "Could not generate video. Please try again.");
     }
+    setAt(setVideoCompletedFlags, activeClipIndex, true);
     return data as VideoJobResult;
   }
 
@@ -211,13 +257,16 @@ export default function Home() {
     setProductImage(null);
     setFields(DEFAULT_FIELDS);
     setCustomBrief(null);
-    setScenePlan([]);
-    setStoryboardImage(null);
-    setVideoPrompt("");
-    setCaption("");
-    setHashtags([]);
+    setClips([]);
+    setActiveClipIndex(0);
+    setProductAnalysis("");
+    setStoryboardImages([]);
+    setVideoPrompts([]);
+    setCaptions([]);
+    setHashtagsList([]);
+    setScenePlanDirtyFlags([]);
+    setVideoCompletedFlags([]);
     setStoryboardError(null);
-    setScenePlanDirty(false);
   }
 
   return (
@@ -229,8 +278,8 @@ export default function Home() {
           สร้างสตอรี่บอร์ดและวิดีโอโฆษณาอัตโนมัติ
         </h1>
         <p className="text-sm leading-relaxed text-gray-400">
-          อัปโหลดรูปนางแบบและสินค้า กรอกรายละเอียดสั้น ๆ ระบบจะร่างแผนฉากให้แก้ไขก่อน
-          แล้วค่อยรวมเป็นภาพสตอรี่บอร์ดเดียว
+          อัปโหลดรูปนางแบบและสินค้า กรอกรายละเอียดสั้น ๆ ระบบจะวิเคราะห์สินค้าและร่างแผนฉากให้แก้ไขก่อน
+          แล้วค่อยรวมเป็นภาพสตอรี่บอร์ด — เลือกได้ว่าจะให้เป็นแคมเปญกี่คลิป
         </p>
       </div>
 
@@ -270,18 +319,29 @@ export default function Home() {
         onSubmit={handleGeneratePlan}
       />
 
-      {(planLoading || (storyboardError && scenePlan.length === 0)) && (
+      {(planLoading || (storyboardError && clips.length === 0)) && (
         <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm backdrop-blur-sm">
           <p className="text-sm font-semibold text-gray-100">แผนฉาก</p>
           {planLoading && (
             <div className="flex h-24 animate-pulse items-center justify-center rounded-xl bg-[#4382BB]/10 text-xs text-[#7bafdb]">
-              กำลังร่างแผนฉาก...
+              กำลังวิเคราะห์สินค้าและร่างแผนฉาก...
             </div>
           )}
           {!planLoading && storyboardError && (
             <ErrorBanner title={storyboardError.title} message={storyboardError.message} details={storyboardError.details} />
           )}
         </div>
+      )}
+
+      {clips.length > 0 && <ProductAnalysisBox analysis={productAnalysis} />}
+
+      {clips.length > 1 && (
+        <ClipTabs
+          clipCount={clips.length}
+          activeIndex={activeClipIndex}
+          completedFlags={videoCompletedFlags}
+          onSelect={setActiveClipIndex}
+        />
       )}
 
       {scenePlan.length > 0 && (
@@ -308,7 +368,7 @@ export default function Home() {
         <VideoPromptEditor
           prompt={videoPrompt}
           loading={promptLoading}
-          onChange={setVideoPrompt}
+          onChange={(value) => setAt(setVideoPrompts, activeClipIndex, value)}
           onRegenerate={handleRegeneratePrompt}
         />
       )}
@@ -335,6 +395,7 @@ export default function Home() {
 
       {storyboardImage && (
         <GenerateVideoPanel
+          key={activeClipIndex}
           canGenerate={Boolean(storyboardImage && videoPrompt)}
           orientation={fields.orientation}
           onGenerate={handleGenerateVideo}

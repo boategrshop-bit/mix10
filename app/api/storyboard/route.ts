@@ -8,7 +8,7 @@ import {
   type RawScenePlanItem,
 } from "@/lib/openai";
 import { validateApiKeyFormat, validateBrief, validateImageFile, validateSceneCount } from "@/lib/validation";
-import { deriveSceneCount, deriveSceneRanges, deriveSheetSize, PRESERVE_IDENTITY_INSTRUCTION, type SceneRange } from "@/lib/prompt-template";
+import { deriveSceneRanges, deriveSheetSize, PRESERVE_IDENTITY_INSTRUCTION, type SceneRange } from "@/lib/prompt-template";
 import type { ApiErrorBody, ScenePlanItem } from "@/lib/types";
 
 const VALID_MODES = ["full", "plan_only", "image_only", "prompt_only", "caption_only"] as const;
@@ -138,36 +138,50 @@ export async function POST(request: NextRequest) {
   }
 
   // mode is "full" or "plan_only" from here on - both need duration/scene count.
-  const durationSeconds = Number(form.get("durationSeconds")) || 10;
+  const durationSeconds = Number(form.get("durationSeconds")) || 10; // duration per clip
   const explicitSceneCountRaw = form.get("sceneCount");
   const explicitSceneCount = explicitSceneCountRaw ? Number(explicitSceneCountRaw) : undefined;
-  const sceneCount = deriveSceneCount(durationSeconds, explicitSceneCount);
-  const sceneCountError = validateSceneCount(sceneCount);
-  if (sceneCountError) return errorResponse("validation_error", sceneCountError, 400);
-  const sceneRanges = deriveSceneRanges(durationSeconds, explicitSceneCount);
+  const clipCountRaw = form.get("clipCount");
+  const clipCount = Math.max(1, Math.min(4, Number(clipCountRaw) || 1));
+
+  const clipSceneRanges: SceneRange[][] = [];
+  for (let i = 0; i < clipCount; i++) {
+    const ranges = deriveSceneRanges(durationSeconds, explicitSceneCount);
+    const sceneCountError = validateSceneCount(ranges.length);
+    if (sceneCountError) return errorResponse("validation_error", sceneCountError, 400);
+    clipSceneRanges.push(ranges);
+  }
+
+  let productImageBase64: string | undefined;
+  let productImageMimeType: string | undefined;
+  if (productImage instanceof Blob) {
+    const productImageError = validateImageFile({ type: productImage.type, size: productImage.size });
+    if (productImageError) return errorResponse("validation_error", productImageError, 400);
+    productImageBase64 = Buffer.from(await productImage.arrayBuffer()).toString("base64");
+    productImageMimeType = productImage.type || "image/png";
+  }
 
   if (mode === "plan_only") {
     try {
-      const rawItems = await callScenePlan(apiKey, brief, sceneRanges);
-      const scenePlan = mergeSceneRanges(rawItems, sceneRanges);
-      return NextResponse.json({ scenePlan });
+      const result = await callScenePlan({ apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType });
+      const clips = result.clips.map((rawItems, i) => mergeSceneRanges(rawItems, clipSceneRanges[i]));
+      return NextResponse.json({ clips, productAnalysis: result.productAnalysis });
     } catch (err) {
       return handleOpenAIError(err);
     }
   }
 
-  // mode === "full"
+  // mode === "full" (single-clip convenience path; not used by the current UI, which
+  // always drives the two-step plan_only -> image_only flow)
   if (!(modelImage instanceof Blob) || !(productImage instanceof Blob)) {
     return errorResponse("validation_error", "Both model and product images are required.", 400);
   }
   const modelImageError = validateImageFile({ type: modelImage.type, size: modelImage.size });
   if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
-  const productImageError = validateImageFile({ type: productImage.type, size: productImage.size });
-  if (productImageError) return errorResponse("validation_error", productImageError, 400);
 
   try {
-    const rawItems = await callScenePlan(apiKey, brief, sceneRanges);
-    const scenePlan = mergeSceneRanges(rawItems, sceneRanges);
+    const result = await callScenePlan({ apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType });
+    const scenePlan = mergeSceneRanges(result.clips[0], clipSceneRanges[0]);
 
     const storyboardImageBase64 = await callImageEdit({
       apiKey,
@@ -179,7 +193,12 @@ export async function POST(request: NextRequest) {
 
     const videoPrompt = await callChatPrompt(apiKey, brief, storyboardImageBase64);
 
-    return NextResponse.json({ storyboardImageBase64, videoPrompt, scenePlan });
+    return NextResponse.json({
+      storyboardImageBase64,
+      videoPrompt,
+      scenePlan,
+      productAnalysis: result.productAnalysis,
+    });
   } catch (err) {
     return handleOpenAIError(err);
   }

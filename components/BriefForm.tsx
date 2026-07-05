@@ -26,10 +26,17 @@ const ORIENTATION_OPTIONS: { value: Orientation; label: string }[] = [
 ];
 
 const SHOT_COUNT_OPTIONS: { value: string; label: string }[] = [
-  { value: "auto", label: "อัตโนมัติ (ตามความยาววิดีโอ)" },
+  { value: "auto", label: "อัตโนมัติ (ตามความยาวต่อคลิป)" },
   { value: "3", label: "3 ช็อต" },
   { value: "5", label: "5 ช็อต" },
   { value: "8", label: "8 ช็อต" },
+];
+
+const CLIP_COUNT_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "1 คลิป" },
+  { value: 2, label: "2 คลิป (เนื้อเรื่องต่อกัน)" },
+  { value: 3, label: "3 คลิป (เนื้อเรื่องต่อกัน)" },
+  { value: 4, label: "4 คลิป (เนื้อเรื่องต่อกัน)" },
 ];
 
 const STYLE_PRESETS: string[] = [
@@ -115,7 +122,7 @@ export default function BriefForm({
 
         <div className="space-y-1">
           <label className="text-sm font-medium text-gray-300" htmlFor="duration">
-            ความยาววิดีโอ (วินาที)
+            ความยาวต่อคลิป (วินาที)
           </label>
           <input
             id="duration"
@@ -126,6 +133,24 @@ export default function BriefForm({
             onChange={(e) => update("durationSeconds", Number(e.target.value) || 10)}
             className={inputClass}
           />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-gray-300" htmlFor="clipCount">
+            จำนวนคลิป
+          </label>
+          <select
+            id="clipCount"
+            value={fields.clipCount}
+            onChange={(e) => update("clipCount", Number(e.target.value))}
+            className={inputClass}
+          >
+            {CLIP_COUNT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value} className="bg-[#0d121c]">
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1">

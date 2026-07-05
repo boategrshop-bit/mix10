@@ -90,21 +90,99 @@ export async function callImageEdit(params: CallImageEditParams): Promise<string
 
 export type RawScenePlanItem = Omit<ScenePlanItem, "startSeconds" | "endSeconds">;
 
-export async function callScenePlan(
-  apiKey: string,
-  brief: string,
-  sceneRanges: SceneRange[]
-): Promise<RawScenePlanItem[]> {
-  const sceneCount = sceneRanges.length;
-  const durationSeconds = sceneRanges[sceneRanges.length - 1]?.endSeconds ?? 0;
-  const budgetLines = sceneRanges
-    .map(
-      (r) =>
-        `Scene ${r.index}: ${r.startSeconds}s-${r.endSeconds}s, max ${maxWordsForDuration(
-          r.endSeconds - r.startSeconds
-        )} Thai words for voiceoverLine`
-    )
-    .join("\n");
+export interface CallScenePlanParams {
+  apiKey: string;
+  brief: string;
+  clipSceneRanges: SceneRange[][]; // one SceneRange[] per clip, precomputed by the caller
+  productImageBase64?: string;
+  productImageMimeType?: string;
+}
+
+export interface ScenePlanCallResult {
+  productAnalysis: string;
+  clips: RawScenePlanItem[][]; // clips[clipIndex] = that clip's own scenes
+}
+
+export async function callScenePlan(params: CallScenePlanParams): Promise<ScenePlanCallResult> {
+  const { apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType } = params;
+  const clipCount = clipSceneRanges.length;
+
+  const clipBudgetBlocks = clipSceneRanges
+    .map((ranges, clipIndex) => {
+      const clipDuration = ranges[ranges.length - 1]?.endSeconds ?? 0;
+      const lines = ranges
+        .map(
+          (r) =>
+            `  Scene ${r.index}: ${r.startSeconds}s-${r.endSeconds}s, max ${maxWordsForDuration(
+              r.endSeconds - r.startSeconds
+            )} Thai words for voiceoverLine`
+        )
+        .join("\n");
+      return `Clip ${clipIndex} (${clipDuration}s total, ${ranges.length} scenes):\n${lines}`;
+    })
+    .join("\n\n");
+
+  const continuityInstruction =
+    clipCount > 1
+      ? `This is a MULTI-CLIP campaign of ${clipCount} separate video clips meant to be watched in ` +
+        `sequence as ONE continuous story - like chapters of a single narrative, not ${clipCount} ` +
+        "unrelated ads. Clip 0 must hook the viewer and introduce the product; middle clips should " +
+        "build interest, demonstrate use, or reveal benefits one at a time; the LAST clip must close " +
+        "with a strong call-to-action. Do not repeat the same beat, pose, or message across clips - " +
+        "each clip should clearly continue from where the previous one left off. "
+      : "";
+
+  const productVisionInstruction = productImageBase64
+    ? "You are also shown a photo of the actual product. Study it closely and use what you see - " +
+      "packaging, shape, color, material, any visible text/branding, apparent category - to write a " +
+      "short productAnalysis (in Thai, 2-4 sentences) identifying what the product is, 2-3 concrete " +
+      "selling points or features you can actually see or reasonably infer, and who it's for. Then " +
+      "use those concrete selling points throughout onScreenText/voiceoverLine so the copy sells " +
+      "specific real benefits instead of generic marketing filler. "
+    : "You were not given a product photo, so keep productAnalysis as an empty string and write " +
+      "onScreenText/voiceoverLine from the brief alone. ";
+
+  const systemMessage =
+    "You are an art director and copywriter planning storyboards for short, visually polished, " +
+    "high-converting marketing videos. " +
+    productVisionInstruction +
+    continuityInstruction +
+    'Output strict JSON of the shape {"productAnalysis":string,"clips":[{"clipIndex":number,' +
+    '"scenes":[{"index":number,"visualDescription":string,"shotType":string,"onScreenText":string,' +
+    '"voiceoverLine":string}]}]}. You must output exactly the requested number of clips, each with ' +
+    "exactly its requested number of scenes indexed 0 to count-1 within that clip, covering that " +
+    "clip's full duration in order. shotType must be a short English phrase naming the camera " +
+    "framing for that scene (e.g. 'wide establishing shot', 'medium shot', 'close-up', " +
+    "'over-the-shoulder', 'flat-lay product shot', 'low-angle hero shot', 'macro detail shot'), " +
+    "chosen to fit that beat of the story and varied meaningfully scene-to-scene (do not repeat the " +
+    "same shotType back-to-back unless the brief clearly calls for it). visualDescription must be in " +
+    "English, richly describing a single photorealistic pose/action/moment for a reference photo - " +
+    "cover the framing implied by shotType, the setting/background, lighting mood, and any styling " +
+    "detail relevant to the brief - featuring the same recurring person and product across all " +
+    "scenes and clips (varying only the pose/action/setting/framing) - do not describe any on-image " +
+    "text in it. onScreenText must be a short Thai caption for that scene, under 60 characters. " +
+    "voiceoverLine must be one Thai voiceover sentence for that scene, paced to be naturally " +
+    "speakable within that scene's time slot - strictly respect the max word count given per scene " +
+    "so the narration timing feels natural, never rushed or cut off. The LAST scene of the LAST " +
+    "clip must have onScreenText and voiceoverLine that both include a strong Thai call-to-action " +
+    "(CTA) urging the viewer to buy/click immediately, using natural Thai livestream/TikTok sales " +
+    "phrasing such as ปักพิกัดให้แล้ว, กดตะกร้าได้เลย, ปักลิ้งให้แล้ว, รีบไปตำ, or รีบไปกด - pick " +
+    "phrasing that fits the brief naturally, while still respecting that scene's word budget. " +
+    "Output only the JSON object, no markdown.";
+
+  const userText =
+    `Brief: ${brief}\nClip count: ${clipCount}\n\n` +
+    `Per-clip timing and voiceoverLine word budgets:\n${clipBudgetBlocks}`;
+
+  const userContent = productImageBase64
+    ? [
+        { type: "text", text: userText },
+        {
+          type: "image_url",
+          image_url: { url: `data:${productImageMimeType ?? "image/png"};base64,${productImageBase64}` },
+        },
+      ]
+    : userText;
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -117,43 +195,8 @@ export async function callScenePlan(
       temperature: 0.7,
       response_format: { type: "json_object" },
       messages: [
-        {
-          role: "system",
-          content:
-            "You are an art director planning storyboards for short, visually polished marketing " +
-            "videos. Given a brief and a per-scene time budget, output strict JSON of the shape " +
-            '{"scenes":[{"index":number,"visualDescription":string,"shotType":string,' +
-            '"onScreenText":string,"voiceoverLine":string}]}. You must output exactly the requested ' +
-            "number of scenes, indexed 0 to count-1, covering the full duration in order. " +
-            "shotType must be a short English phrase naming the camera framing for that scene " +
-            "(e.g. 'wide establishing shot', 'medium shot', 'close-up', 'over-the-shoulder', " +
-            "'flat-lay product shot', 'low-angle hero shot', 'macro detail shot'), chosen to fit " +
-            "that beat of the story and varied meaningfully scene-to-scene (do not repeat the same " +
-            "shotType back-to-back unless the brief clearly calls for it) so the finished video " +
-            "feels dynamically shot rather than static. visualDescription must be in English, " +
-            "richly describing a single photorealistic pose/action/moment for a reference photo - " +
-            "cover the framing implied by shotType, the setting/background, lighting mood, and any " +
-            "styling detail relevant to the brief - featuring the same recurring person and product " +
-            "across all scenes (varying only the pose/action/setting/framing) - do not describe any " +
-            "on-image text in it. onScreenText must be a short Thai caption for that scene, under 60 " +
-            "characters. voiceoverLine must be one Thai voiceover sentence for that scene, paced to " +
-            "be naturally speakable within that scene's time slot - strictly respect the max word " +
-            "count given per scene below so the narration timing feels natural, never rushed or cut " +
-            "off. The LAST scene's onScreenText and voiceoverLine must both include a strong Thai " +
-            "call-to-action (CTA) urging the viewer to buy/click immediately, using natural Thai " +
-            "livestream/TikTok sales phrasing such as ปักพิกัดให้แล้ว, " +
-            "กดตะกร้าได้เลย, " +
-            "ปักลิ้งให้แล้ว, " +
-            "รีบไปตำ, or รีบไปกด " +
-            "- pick phrasing that fits the brief naturally, while still respecting that scene's word " +
-            "budget. Output only the JSON object, no markdown.",
-        },
-        {
-          role: "user",
-          content:
-            `Brief: ${brief}\nTotal duration: ${durationSeconds} seconds\nScene count: ${sceneCount}\n` +
-            `Per-scene timing and voiceoverLine word budgets:\n${budgetLines}`,
-        },
+        { role: "system", content: systemMessage },
+        { role: "user", content: userContent },
       ],
     }),
   });
@@ -168,21 +211,29 @@ export async function callScenePlan(
     throw new OpenAIApiError("OpenAI did not return a scene plan.", 500);
   }
 
-  let parsed: { scenes?: RawScenePlanItem[] };
+  let parsed: { productAnalysis?: string; clips?: { clipIndex: number; scenes: RawScenePlanItem[] }[] };
   try {
     parsed = JSON.parse(content);
   } catch {
     throw new OpenAIApiError("OpenAI returned an invalid scene plan.", 500);
   }
 
-  if (!Array.isArray(parsed.scenes) || parsed.scenes.length !== sceneCount) {
-    throw new OpenAIApiError(
-      `OpenAI returned ${parsed.scenes?.length ?? 0} scenes, expected ${sceneCount}.`,
-      500
-    );
+  if (!Array.isArray(parsed.clips) || parsed.clips.length !== clipCount) {
+    throw new OpenAIApiError(`OpenAI returned ${parsed.clips?.length ?? 0} clips, expected ${clipCount}.`, 500);
   }
 
-  return parsed.scenes;
+  const clips: RawScenePlanItem[][] = clipSceneRanges.map((ranges, clipIndex) => {
+    const clip = parsed.clips!.find((c) => c.clipIndex === clipIndex) ?? parsed.clips![clipIndex];
+    if (!Array.isArray(clip?.scenes) || clip.scenes.length !== ranges.length) {
+      throw new OpenAIApiError(
+        `OpenAI returned ${clip?.scenes?.length ?? 0} scenes for clip ${clipIndex}, expected ${ranges.length}.`,
+        500
+      );
+    }
+    return clip.scenes;
+  });
+
+  return { productAnalysis: parsed.productAnalysis ?? "", clips };
 }
 
 export async function callChatPrompt(

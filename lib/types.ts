@@ -15,6 +15,11 @@ export interface StoryboardResult {
   videoPrompt: string;
 }
 
+export interface MultiClipPlanResult {
+  productAnalysis: string;
+  clips: ScenePlanItem[][]; // clips[clipIndex] = that clip's own scene list
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;

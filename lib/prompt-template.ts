@@ -4,10 +4,11 @@ export type VideoTarget = "omni-flash" | "veo-3.1-lite";
 
 export interface BriefTemplateFields {
   productName: string;
-  durationSeconds: number;
+  durationSeconds: number; // duration per clip
   orientation: Orientation;
   style: string;
   shotCount: number | null; // null = derive automatically from durationSeconds
+  clipCount: number; // number of separate clips forming one continuous campaign story
 }
 
 const ORIENTATION_LABEL_TH: Record<Orientation, string> = {
