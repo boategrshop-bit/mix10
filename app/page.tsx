@@ -62,6 +62,7 @@ export default function Home() {
   // continuous story, planned together in a single call. Every clip's storyboard,
   // prompt, caption, and video are shown stacked together (no tab-switching).
   const [clips, setClips] = useState<ScenePlanItem[][]>([]);
+  const [voiceoverScripts, setVoiceoverScripts] = useState<string[]>([]);
   const [productAnalysis, setProductAnalysis] = useState("");
   const [storyboardImages, setStoryboardImages] = useState<(string | null)[]>([]);
   const [videoPrompts, setVideoPrompts] = useState<string[]>([]);
@@ -110,8 +111,10 @@ export default function Home() {
       form.append("clipCount", String(fields.clipCount));
       if (productImage) form.append("productImage", productImage);
       const result = await postStoryboard(form);
-      const newClips: ScenePlanItem[][] = result.clips ?? [];
+      const rawClips: { scenePlan: ScenePlanItem[]; voiceoverScript: string }[] = result.clips ?? [];
+      const newClips = rawClips.map((c) => c.scenePlan);
       setClips(newClips);
+      setVoiceoverScripts(rawClips.map((c) => c.voiceoverScript));
       setProductAnalysis(result.productAnalysis ?? "");
       setStoryboardImages(newClips.map(() => null));
       setVideoPrompts(newClips.map(() => ""));
@@ -138,12 +141,8 @@ export default function Home() {
     if (storyboardImages[clipIndex]) setAt(setScenePlanDirtyFlags, clipIndex, true);
   }
 
-  function handleVoiceoverChange(clipIndex: number, sceneIndex: number, value: string) {
-    setClips((prev) => {
-      const next = [...prev];
-      next[clipIndex] = next[clipIndex].map((s) => (s.index === sceneIndex ? { ...s, voiceoverLine: value } : s));
-      return next;
-    });
+  function handleVoiceoverScriptChange(clipIndex: number, value: string) {
+    setAt(setVoiceoverScripts, clipIndex, value);
     if (storyboardImages[clipIndex]) setAt(setScenePlanDirtyFlags, clipIndex, true);
   }
 
@@ -231,7 +230,7 @@ export default function Home() {
 
   async function handleGenerateVideo(clipIndex: number): Promise<VideoJobResult> {
     const scenePlanForClip = clips[clipIndex] ?? [];
-    const narrationScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] ${s.voiceoverLine}`).join(" ");
+    const narrationScript = voiceoverScripts[clipIndex] ?? "";
     const captionScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
 
     const form = new FormData();
@@ -262,6 +261,7 @@ export default function Home() {
     setFields(DEFAULT_FIELDS);
     setCustomBrief(null);
     setClips([]);
+    setVoiceoverScripts([]);
     setProductAnalysis("");
     setStoryboardImages([]);
     setVideoPrompts([]);
@@ -348,10 +348,11 @@ export default function Home() {
           {clips.length > 1 && <p className="text-sm font-semibold text-[#7bafdb]">คลิปที่ {i + 1}</p>}
           <ScenePlanEditor
             scenePlan={scenePlanForClip}
+            voiceoverScript={voiceoverScripts[i] ?? ""}
             loading={imageLoadingFlags[i] ?? false}
             dirty={scenePlanDirtyFlags[i] ?? false}
             onCaptionChange={(sceneIndex, value) => handleCaptionChange(i, sceneIndex, value)}
-            onVoiceoverChange={(sceneIndex, value) => handleVoiceoverChange(i, sceneIndex, value)}
+            onVoiceoverScriptChange={(value) => handleVoiceoverScriptChange(i, value)}
             onGenerateImage={() => generateOneClipImage(i)}
           />
         </div>
@@ -382,7 +383,7 @@ export default function Home() {
         if (!(image || imgLoading || clipError)) return null;
 
         const videoPrompt = videoPrompts[i] ?? "";
-        const narrationScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] ${s.voiceoverLine}`).join(" ");
+        const narrationScript = voiceoverScripts[i] ?? "";
         const captionScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
         const fullVideoPromptText = buildOmniFlashPromptText({ videoPrompt, narrationScript, captionScript, voiceGender });
 

@@ -164,7 +164,10 @@ export async function POST(request: NextRequest) {
   if (mode === "plan_only") {
     try {
       const result = await callScenePlan({ apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType });
-      const clips = result.clips.map((rawItems, i) => mergeSceneRanges(rawItems, clipSceneRanges[i]));
+      const clips = result.clips.map((clip, i) => ({
+        scenePlan: mergeSceneRanges(clip.scenes, clipSceneRanges[i]),
+        voiceoverScript: clip.voiceoverScript,
+      }));
       return NextResponse.json({ clips, productAnalysis: result.productAnalysis });
     } catch (err) {
       return handleOpenAIError(err);
@@ -181,7 +184,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await callScenePlan({ apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType });
-    const scenePlan = mergeSceneRanges(result.clips[0], clipSceneRanges[0]);
+    const scenePlan = mergeSceneRanges(result.clips[0].scenes, clipSceneRanges[0]);
+    const voiceoverScript = result.clips[0].voiceoverScript;
 
     const storyboardImageBase64 = await callImageEdit({
       apiKey,
@@ -197,6 +201,7 @@ export async function POST(request: NextRequest) {
       storyboardImageBase64,
       videoPrompt,
       scenePlan,
+      voiceoverScript,
       productAnalysis: result.productAnalysis,
     });
   } catch (err) {

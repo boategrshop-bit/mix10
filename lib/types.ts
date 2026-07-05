@@ -7,7 +7,6 @@ export interface ScenePlanItem {
   visualDescription: string;
   shotType: string;
   onScreenText: string;
-  voiceoverLine: string;
 }
 
 export interface StoryboardResult {
@@ -15,9 +14,14 @@ export interface StoryboardResult {
   videoPrompt: string;
 }
 
+export interface ClipPlan {
+  scenePlan: ScenePlanItem[];
+  voiceoverScript: string; // one continuous voiceover for the whole clip, not split per scene
+}
+
 export interface MultiClipPlanResult {
   productAnalysis: string;
-  clips: ScenePlanItem[][]; // clips[clipIndex] = that clip's own scene list
+  clips: ClipPlan[]; // clips[clipIndex] = that clip's own scenes + continuous VO script
 }
 
 export interface ApiErrorBody {
@@ -36,7 +40,7 @@ export interface GenerateVideoInput {
   productImageBase64?: string;
   productImageMimeType?: string;
   videoPrompt: string;
-  narrationScript?: string; // composed from scenePlan voiceoverLine fields, time-ordered
+  narrationScript?: string; // one continuous voiceover script for the whole clip
   captionScript?: string; // composed from scenePlan onScreenText fields, time-ordered
   voiceGender?: VoiceGender;
   videoTarget?: VideoTarget; // which real provider to use when apiKey is present; defaults to omni-flash

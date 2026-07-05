@@ -94,8 +94,9 @@ export function buildOmniFlashPromptText(params: OmniFlashPromptParams): string 
     : "";
 
   const narrationInstruction = narrationScript
-    ? ` Include spoken voiceover narration/dialogue audio matching this script, timed to the ` +
-      `matching scene: ${narrationScript}${voiceInstruction}`
+    ? ` Include one continuous spoken voiceover narration track for the whole video, read straight ` +
+      `through without pausing or restarting between shots, matching exactly this script: ` +
+      `${narrationScript}${voiceInstruction}`
     : "";
 
   return (
