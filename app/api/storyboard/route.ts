@@ -34,7 +34,11 @@ function mergeSceneRanges(items: RawScenePlanItem[], ranges: SceneRange[]): Scen
   }));
 }
 
-function buildStoryboardSheetPrompt(brief: string, scenePlan: ScenePlanItem[]): string {
+function buildStoryboardSheetPrompt(
+  brief: string,
+  scenePlan: ScenePlanItem[],
+  options: { hasModelImage: boolean; hasProductImage: boolean }
+): string {
   const panelLines = scenePlan
     .map(
       (s) =>
@@ -44,20 +48,33 @@ function buildStoryboardSheetPrompt(brief: string, scenePlan: ScenePlanItem[]): 
     )
     .join("\n");
 
+  const referenceInstruction =
+    options.hasModelImage && options.hasProductImage
+      ? "Use the person from the first reference image and the product from the second reference " +
+        "image consistently across every panel, matching both as closely as possible to the " +
+        "references. "
+      : options.hasModelImage
+        ? "Use the person from the attached reference image consistently across every panel, " +
+          "matching them as closely as possible to the reference. "
+        : options.hasProductImage
+          ? "Use the product from the attached reference image consistently across every panel, " +
+            "matching it as closely as possible to the reference. "
+          : "";
+
+  const identityInstruction = options.hasModelImage || options.hasProductImage ? ` ${PRESERVE_IDENTITY_INSTRUCTION}` : "";
+
   return (
-    `Create a single storyboard sheet image for a marketing video, designed like a premium ad ` +
-    `agency's shot-list deck. Context: ${brief}. Stack ${scenePlan.length} panels vertically in ` +
-    `one image, each panel clearly separated with card-style framing (subtle border, soft drop ` +
-    `shadow, consistent rounded corners and spacing), each labeled with a small numbered badge and ` +
-    `its time-range, and each showing the described photo shot exactly as specified by its shot ` +
-    `type (framing/angle) with its caption text baked into the image:\n${panelLines}\n` +
-    `Use the person from the first reference image and the product from the second reference ` +
-    `image consistently across every panel, matching both as closely as possible to the ` +
-    `references. Keep a cohesive color grade, lighting mood, and background styling across all ` +
-    `panels so the sheet reads as one unified visual story, not disconnected photos. Add a clean ` +
-    `title header at the top and subtle footer branding space. Clean modern layout, elegant ` +
-    `readable typography, generous whitespace, product/brand-safe composition, polished ` +
-    `high-resolution photography look. ${PRESERVE_IDENTITY_INSTRUCTION}`
+    `Create a single storyboard sheet image for a short video, designed like a premium ad agency's ` +
+    `shot-list deck. Context: ${brief}. Stack ${scenePlan.length} panels vertically in one image, ` +
+    `each panel clearly separated with card-style framing (subtle border, soft drop shadow, ` +
+    `consistent rounded corners and spacing), each labeled with a small numbered badge and its ` +
+    `time-range, and each showing the described photo shot exactly as specified by its shot type ` +
+    `(framing/angle) with its caption text baked into the image:\n${panelLines}\n` +
+    `${referenceInstruction}Keep a cohesive color grade, lighting mood, and background styling ` +
+    `across all panels so the sheet reads as one unified visual story, not disconnected photos. Add ` +
+    `a clean title header at the top and subtle footer branding space. Clean modern layout, elegant ` +
+    `readable typography, generous whitespace, brand-safe composition, polished high-resolution ` +
+    `photography look.${identityInstruction}`
   );
 }
 
@@ -115,20 +132,23 @@ export async function POST(request: NextRequest) {
     } catch {
       return errorResponse("validation_error", "scenePlan must be a non-empty JSON array.", 400);
     }
-    if (!(modelImage instanceof Blob) || !(productImage instanceof Blob)) {
-      return errorResponse("validation_error", "Both model and product images are required.", 400);
+    const hasModelImage = modelImage instanceof Blob;
+    const hasProductImage = productImage instanceof Blob;
+    if (hasModelImage) {
+      const modelImageError = validateImageFile({ type: (modelImage as Blob).type, size: (modelImage as Blob).size });
+      if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
     }
-    const modelImageError = validateImageFile({ type: modelImage.type, size: modelImage.size });
-    if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
-    const productImageError = validateImageFile({ type: productImage.type, size: productImage.size });
-    if (productImageError) return errorResponse("validation_error", productImageError, 400);
+    if (hasProductImage) {
+      const productImageError = validateImageFile({ type: (productImage as Blob).type, size: (productImage as Blob).size });
+      if (productImageError) return errorResponse("validation_error", productImageError, 400);
+    }
 
     try {
       const storyboardImageBase64 = await callImageEdit({
         apiKey,
-        modelImage,
-        productImage,
-        promptText: buildStoryboardSheetPrompt(brief, scenePlan),
+        modelImage: hasModelImage ? (modelImage as Blob) : undefined,
+        productImage: hasProductImage ? (productImage as Blob) : undefined,
+        promptText: buildStoryboardSheetPrompt(brief, scenePlan, { hasModelImage, hasProductImage }),
         size: deriveSheetSize(scenePlan.length),
       });
       return NextResponse.json({ storyboardImageBase64 });
@@ -143,6 +163,7 @@ export async function POST(request: NextRequest) {
   const explicitSceneCount = explicitSceneCountRaw ? Number(explicitSceneCountRaw) : undefined;
   const clipCountRaw = form.get("clipCount");
   const clipCount = Math.max(1, Math.min(4, Number(clipCountRaw) || 1));
+  const contentMode: "sales" | "creative" = form.get("contentMode") === "creative" ? "creative" : "sales";
 
   const clipSceneRanges: SceneRange[][] = [];
   for (let i = 0; i < clipCount; i++) {
@@ -163,7 +184,14 @@ export async function POST(request: NextRequest) {
 
   if (mode === "plan_only") {
     try {
-      const result = await callScenePlan({ apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType });
+      const result = await callScenePlan({
+        apiKey,
+        brief,
+        clipSceneRanges,
+        productImageBase64,
+        productImageMimeType,
+        contentMode,
+      });
       const clips = result.clips.map((clip, i) => ({
         scenePlan: mergeSceneRanges(clip.scenes, clipSceneRanges[i]),
         voiceoverScript: clip.voiceoverScript,
@@ -176,22 +204,30 @@ export async function POST(request: NextRequest) {
 
   // mode === "full" (single-clip convenience path; not used by the current UI, which
   // always drives the two-step plan_only -> image_only flow)
-  if (!(modelImage instanceof Blob) || !(productImage instanceof Blob)) {
-    return errorResponse("validation_error", "Both model and product images are required.", 400);
+  const hasModelImage = modelImage instanceof Blob;
+  const hasProductImage = productImage instanceof Blob;
+  if (hasModelImage) {
+    const modelImageError = validateImageFile({ type: (modelImage as Blob).type, size: (modelImage as Blob).size });
+    if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
   }
-  const modelImageError = validateImageFile({ type: modelImage.type, size: modelImage.size });
-  if (modelImageError) return errorResponse("validation_error", modelImageError, 400);
 
   try {
-    const result = await callScenePlan({ apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType });
+    const result = await callScenePlan({
+      apiKey,
+      brief,
+      clipSceneRanges,
+      productImageBase64,
+      productImageMimeType,
+      contentMode,
+    });
     const scenePlan = mergeSceneRanges(result.clips[0].scenes, clipSceneRanges[0]);
     const voiceoverScript = result.clips[0].voiceoverScript;
 
     const storyboardImageBase64 = await callImageEdit({
       apiKey,
-      modelImage,
-      productImage,
-      promptText: buildStoryboardSheetPrompt(brief, scenePlan),
+      modelImage: hasModelImage ? (modelImage as Blob) : undefined,
+      productImage: hasProductImage ? (productImage as Blob) : undefined,
+      promptText: buildStoryboardSheetPrompt(brief, scenePlan, { hasModelImage, hasProductImage }),
       size: deriveSheetSize(scenePlan.length),
     });
 

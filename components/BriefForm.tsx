@@ -11,6 +11,7 @@ interface BriefFormProps {
   brief: string;
   briefTouched: boolean;
   loading: boolean;
+  creativeMode: boolean;
   onModelImageChange: (file: File | null) => void;
   onProductImageChange: (file: File | null) => void;
   onFieldsChange: (fields: BriefTemplateFields) => void;
@@ -80,6 +81,7 @@ export default function BriefForm({
   brief,
   briefTouched,
   loading,
+  creativeMode,
   onModelImageChange,
   onProductImageChange,
   onFieldsChange,
@@ -87,8 +89,10 @@ export default function BriefForm({
   onResetBrief,
   onSubmit,
 }: BriefFormProps) {
-  const productNameError = validateProductName(fields.productName);
-  const canSubmit = Boolean(apiKey && modelImage && productImage && !productNameError && !loading);
+  const productNameError = creativeMode ? null : validateProductName(fields.productName);
+  const canSubmit = creativeMode
+    ? Boolean(apiKey && brief.trim().length >= 5 && !loading)
+    : Boolean(apiKey && modelImage && productImage && !productNameError && !loading);
 
   function update<K extends keyof BriefTemplateFields>(key: K, value: BriefTemplateFields[K]) {
     onFieldsChange({ ...fields, [key]: value });
@@ -100,25 +104,33 @@ export default function BriefForm({
   return (
     <div className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm backdrop-blur-sm">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ImageUploader label="รูปนางแบบ" file={modelImage} onChange={onModelImageChange} />
-        <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} allowUrlImport />
+        <ImageUploader
+          label={creativeMode ? "รูปตัวละคร (ถ้ามี, ไม่บังคับ)" : "รูปนางแบบ"}
+          file={modelImage}
+          onChange={onModelImageChange}
+        />
+        {!creativeMode && (
+          <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} allowUrlImport />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-300" htmlFor="productName">
-            ชื่อสินค้า
-          </label>
-          <input
-            id="productName"
-            type="text"
-            value={fields.productName}
-            onChange={(e) => update("productName", e.target.value)}
-            placeholder="เช่น เซรั่มบำรุงผิวหน้า"
-            className={inputClass}
-          />
-          {productNameError && <p className="text-xs text-red-400">{productNameError}</p>}
-        </div>
+        {!creativeMode && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-300" htmlFor="productName">
+              ชื่อสินค้า
+            </label>
+            <input
+              id="productName"
+              type="text"
+              value={fields.productName}
+              onChange={(e) => update("productName", e.target.value)}
+              placeholder="เช่น เซรั่มบำรุงผิวหน้า"
+              className={inputClass}
+            />
+            {productNameError && <p className="text-xs text-red-400">{productNameError}</p>}
+          </div>
+        )}
 
         <div className="space-y-1">
           <label className="text-sm font-medium text-gray-300" htmlFor="duration">
@@ -219,28 +231,30 @@ export default function BriefForm({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            พรอมต์ที่จะส่ง (แก้ไขได้)
-          </p>
-          {briefTouched && (
-            <button
-              type="button"
-              onClick={onResetBrief}
-              className="text-xs font-medium text-[#7bafdb] underline underline-offset-2 hover:text-[#a3c8e6]"
-            >
-              รีเซ็ตเป็นข้อความอัตโนมัติ
-            </button>
-          )}
+      {!creativeMode && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              พรอมต์ที่จะส่ง (แก้ไขได้)
+            </p>
+            {briefTouched && (
+              <button
+                type="button"
+                onClick={onResetBrief}
+                className="text-xs font-medium text-[#7bafdb] underline underline-offset-2 hover:text-[#a3c8e6]"
+              >
+                รีเซ็ตเป็นข้อความอัตโนมัติ
+              </button>
+            )}
+          </div>
+          <textarea
+            value={brief}
+            onChange={(e) => onBriefChange(e.target.value)}
+            rows={4}
+            className="w-full rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-relaxed text-gray-300 shadow-sm outline-none transition focus:border-[#4382BB] focus:bg-black/30 focus:ring-2 focus:ring-[#4382BB]/30"
+          />
         </div>
-        <textarea
-          value={brief}
-          onChange={(e) => onBriefChange(e.target.value)}
-          rows={4}
-          className="w-full rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-relaxed text-gray-300 shadow-sm outline-none transition focus:border-[#4382BB] focus:bg-black/30 focus:ring-2 focus:ring-[#4382BB]/30"
-        />
-      </div>
+      )}
 
       <button
         type="button"

@@ -52,29 +52,39 @@ async function parseOpenAIError(response: Response): Promise<OpenAIApiError> {
 
 export interface CallImageEditParams {
   apiKey: string;
-  modelImage: Blob;
-  productImage: Blob;
+  modelImage?: Blob;
+  productImage?: Blob;
   promptText: string;
   size: string;
 }
 
 export async function callImageEdit(params: CallImageEditParams): Promise<string> {
   const { apiKey, modelImage, productImage, promptText, size } = params;
+  const references = [modelImage, productImage].filter((img): img is Blob => Boolean(img));
 
-  const form = new FormData();
-  form.append("model", "gpt-image-2");
-  form.append("image[]", modelImage, "model.png");
-  form.append("image[]", productImage, "product.png");
-  form.append("prompt", promptText);
-  form.append("size", size);
-  form.append("quality", "medium");
-  form.append("n", "1");
+  let response: Response;
+  if (references.length > 0) {
+    const form = new FormData();
+    form.append("model", "gpt-image-2");
+    references.forEach((img, i) => form.append("image[]", img, `ref-${i}.png`));
+    form.append("prompt", promptText);
+    form.append("size", size);
+    form.append("quality", "medium");
+    form.append("n", "1");
 
-  const response = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
+    response = await fetch("https://api.openai.com/v1/images/edits", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+  } else {
+    // No reference photos (e.g. creative/non-sales mode) - plain text-to-image generation.
+    response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-image-2", prompt: promptText, size, quality: "medium", n: 1 }),
+    });
+  }
 
   if (!response.ok) {
     throw await parseOpenAIError(response);
@@ -96,6 +106,7 @@ export interface CallScenePlanParams {
   clipSceneRanges: SceneRange[][]; // one SceneRange[] per clip, precomputed by the caller
   productImageBase64?: string;
   productImageMimeType?: string;
+  contentMode: "sales" | "creative";
 }
 
 export interface ClipPlanRaw {
@@ -109,8 +120,9 @@ export interface ScenePlanCallResult {
 }
 
 export async function callScenePlan(params: CallScenePlanParams): Promise<ScenePlanCallResult> {
-  const { apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType } = params;
+  const { apiKey, brief, clipSceneRanges, productImageBase64, productImageMimeType, contentMode } = params;
   const clipCount = clipSceneRanges.length;
+  const isSales = contentMode === "sales";
 
   const clipBudgetBlocks = clipSceneRanges
     .map((ranges, clipIndex) => {
@@ -126,27 +138,45 @@ export async function callScenePlan(params: CallScenePlanParams): Promise<SceneP
 
   const continuityInstruction =
     clipCount > 1
-      ? `This is a MULTI-CLIP campaign of ${clipCount} separate video clips meant to be watched in ` +
-        `sequence as ONE continuous story - like chapters of a single narrative, not ${clipCount} ` +
-        "unrelated ads. Clip 0 must hook the viewer and introduce the product; middle clips should " +
-        "build interest, demonstrate use, or reveal benefits one at a time; the LAST clip must close " +
-        "with a strong call-to-action. Do not repeat the same beat, pose, or message across clips - " +
-        "each clip should clearly continue from where the previous one left off. "
+      ? `This is a MULTI-CLIP ${isSales ? "campaign" : "piece"} of ${clipCount} separate video clips ` +
+        `meant to be watched in sequence as ONE continuous story - like chapters of a single ` +
+        `narrative, not ${clipCount} unrelated clips. Clip 0 must hook the viewer and set up ` +
+        `${isSales ? "the product" : "the story"}; middle clips should build interest and develop ` +
+        `${isSales ? "the product's benefits" : "the plot"} one beat at a time; the LAST clip must ` +
+        `close ${isSales ? "with a strong call-to-action" : "the story satisfyingly"}. Do not repeat ` +
+        "the same beat, pose, or message across clips - each clip should clearly continue from " +
+        "where the previous one left off. "
       : "";
 
-  const productVisionInstruction = productImageBase64
-    ? "You are also shown a photo of the actual product. Study it closely and use what you see - " +
-      "packaging, shape, color, material, any visible text/branding, apparent category - to write a " +
-      "short productAnalysis (in Thai, 2-4 sentences) identifying what the product is, 2-3 concrete " +
-      "selling points or features you can actually see or reasonably infer, and who it's for. Then " +
-      "use those concrete selling points throughout voiceoverScript/onScreenText so the copy sells " +
-      "specific real benefits instead of generic marketing filler. "
-    : "You were not given a product photo, so keep productAnalysis as an empty string and write " +
-      "voiceoverScript/onScreenText from the brief alone. ";
+  const productVisionInstruction =
+    isSales && productImageBase64
+      ? "You are also shown a photo of the actual product. Study it closely and use what you see - " +
+        "packaging, shape, color, material, any visible text/branding, apparent category - to write a " +
+        "short productAnalysis (in Thai, 2-4 sentences) identifying what the product is, 2-3 concrete " +
+        "selling points or features you can actually see or reasonably infer, and who it's for. Then " +
+        "use those concrete selling points throughout voiceoverScript/onScreenText so the copy sells " +
+        "specific real benefits instead of generic marketing filler. "
+      : "Keep productAnalysis as an empty string and write voiceoverScript/onScreenText from the " +
+        "brief alone. ";
+
+  const roleInstruction = isSales
+    ? "You are an art director and copywriter planning storyboards for short, visually polished, " +
+      "high-converting marketing videos. "
+    : "You are a creative director planning storyboards for short video content based on the " +
+      "creator's own creative brief below (a story, skit, drama, vlog, or any concept they describe - " +
+      "not necessarily a product ad). Follow their idea faithfully and bring it to life visually. ";
+
+  const ctaInstruction = isSales
+    ? "The LAST clip's voiceoverScript and its LAST scene's onScreenText must both include a strong " +
+      "Thai call-to-action (CTA) urging the viewer to buy/click immediately, using natural Thai " +
+      "livestream/TikTok sales phrasing such as ปักพิกัดให้แล้ว, กดตะกร้าได้เลย, ปักลิ้งให้แล้ว, " +
+      "รีบไปตำ, or รีบไปกด - pick phrasing that fits the brief naturally, while still respecting the " +
+      "word budget. "
+    : "End the LAST clip on a satisfying narrative beat that fits the brief - no sales pitch or " +
+      "call-to-action unless the brief itself explicitly asks for one. ";
 
   const systemMessage =
-    "You are an art director and copywriter planning storyboards for short, visually polished, " +
-    "high-converting marketing videos. " +
+    roleInstruction +
     productVisionInstruction +
     continuityInstruction +
     'Output strict JSON of the shape {"productAnalysis":string,"clips":[{"clipIndex":number,' +
@@ -169,11 +199,9 @@ export async function callScenePlan(params: CallScenePlanParams): Promise<SceneP
     "product across all scenes and clips (varying only the pose/action/setting/framing) - do not " +
     "describe any on-image text in it. onScreenText must be a short Thai caption for that scene, " +
     "under 60 characters, thematically matching whatever the voiceoverScript is saying at that " +
-    "point in the clip. The LAST clip's voiceoverScript and its LAST scene's onScreenText must both " +
-    "include a strong Thai call-to-action (CTA) urging the viewer to buy/click immediately, using " +
-    "natural Thai livestream/TikTok sales phrasing such as ปักพิกัดให้แล้ว, กดตะกร้าได้เลย, " +
-    "ปักลิ้งให้แล้ว, รีบไปตำ, or รีบไปกด - pick phrasing that fits the brief naturally, while still " +
-    "respecting the word budget. Output only the JSON object, no markdown.";
+    "point in the clip. " +
+    ctaInstruction +
+    "Output only the JSON object, no markdown.";
 
   const userText =
     `Brief: ${brief}\nClip count: ${clipCount}\n\n` +

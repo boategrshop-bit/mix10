@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ApiKeyInput from "@/components/ApiKeyInput";
+import CreativePromptBox from "@/components/CreativePromptBox";
 import BriefForm from "@/components/BriefForm";
 import ErrorBanner from "@/components/ErrorBanner";
 import ProductAnalysisBox from "@/components/ProductAnalysisBox";
@@ -47,7 +48,9 @@ export default function Home() {
   const [productImage, setProductImage] = useState<File | null>(null);
   const [fields, setFields] = useState<BriefTemplateFields>(DEFAULT_FIELDS);
   const [customBrief, setCustomBrief] = useState<string | null>(null);
-  const brief = customBrief ?? composeBrief(fields);
+  const [creativeMode, setCreativeMode] = useState(false);
+  const [creativePrompt, setCreativePrompt] = useState("");
+  const brief = creativeMode ? creativePrompt : (customBrief ?? composeBrief(fields));
   const briefTouched = customBrief !== null;
 
   function handleBriefChange(value: string) {
@@ -87,6 +90,7 @@ export default function Home() {
     form.append("mode", mode);
     form.append("durationSeconds", String(fields.durationSeconds));
     if (fields.shotCount) form.append("sceneCount", String(fields.shotCount));
+    form.append("contentMode", creativeMode ? "creative" : "sales");
     return form;
   }
 
@@ -182,13 +186,15 @@ export default function Home() {
         setAt(setPromptLoadingFlags, clipIndex, false);
       }
 
-      setAt(setCaptionLoadingFlags, clipIndex, true);
-      try {
-        await requestCaption(clipIndex);
-      } catch {
-        // non-fatal; user can still regenerate the caption manually
-      } finally {
-        setAt(setCaptionLoadingFlags, clipIndex, false);
+      if (!creativeMode) {
+        setAt(setCaptionLoadingFlags, clipIndex, true);
+        try {
+          await requestCaption(clipIndex);
+        } catch {
+          // non-fatal; user can still regenerate the caption manually
+        } finally {
+          setAt(setCaptionLoadingFlags, clipIndex, false);
+        }
       }
     } catch (err) {
       setAt(setImageLoadingFlags, clipIndex, false);
@@ -260,6 +266,7 @@ export default function Home() {
     setProductImage(null);
     setFields(DEFAULT_FIELDS);
     setCustomBrief(null);
+    setCreativePrompt("");
     setClips([]);
     setVoiceoverScripts([]);
     setProductAnalysis("");
@@ -286,10 +293,18 @@ export default function Home() {
           สร้างสตอรี่บอร์ดและวิดีโอโฆษณาอัตโนมัติ
         </h1>
         <p className="text-sm leading-relaxed text-gray-400">
-          อัปโหลดรูปนางแบบและสินค้า กรอกรายละเอียดสั้น ๆ ระบบจะวิเคราะห์สินค้าและร่างแผนฉากให้แก้ไขก่อน
-          แล้วค่อยรวมเป็นภาพสตอรี่บอร์ด — เลือกได้ว่าจะให้เป็นแคมเปญกี่คลิป
+          {creativeMode
+            ? "บอกไอเดียที่อยากสร้างด้านบน เลือกจำนวนคลิป/ฉาก แล้วระบบจะร่างแผนฉากให้แก้ไขก่อน แล้วค่อยรวมเป็นภาพสตอรี่บอร์ด"
+            : "อัปโหลดรูปนางแบบและสินค้า กรอกรายละเอียดสั้น ๆ ระบบจะวิเคราะห์สินค้าและร่างแผนฉากให้แก้ไขก่อน แล้วค่อยรวมเป็นภาพสตอรี่บอร์ด — เลือกได้ว่าจะให้เป็นแคมเปญกี่คลิป"}
         </p>
       </div>
+
+      <CreativePromptBox
+        value={creativePrompt}
+        onChange={setCreativePrompt}
+        creativeMode={creativeMode}
+        onCreativeModeChange={setCreativeMode}
+      />
 
       <ApiKeyInput
         value={apiKey}
@@ -319,6 +334,7 @@ export default function Home() {
         brief={brief}
         briefTouched={briefTouched}
         loading={planLoading}
+        creativeMode={creativeMode}
         onModelImageChange={setModelImage}
         onProductImageChange={setProductImage}
         onFieldsChange={setFields}
@@ -341,7 +357,7 @@ export default function Home() {
         </div>
       )}
 
-      {clips.length > 0 && <ProductAnalysisBox analysis={productAnalysis} />}
+      {!creativeMode && clips.length > 0 && <ProductAnalysisBox analysis={productAnalysis} />}
 
       {clips.map((scenePlanForClip, i) => (
         <div key={`plan-${i}`} className="space-y-2">
@@ -404,7 +420,7 @@ export default function Home() {
                 onRegenerate={() => handleRegeneratePrompt(i)}
               />
             )}
-            {(imgLoading || image) && (
+            {!creativeMode && (imgLoading || image) && (
               <CaptionHashtagBox
                 caption={captions[i] ?? ""}
                 hashtags={hashtagsList[i] ?? []}
