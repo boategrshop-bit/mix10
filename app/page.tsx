@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ApiKeyInput from "@/components/ApiKeyInput";
+import LicenseKeyGate from "@/components/LicenseKeyGate";
 import CreativePromptBox from "@/components/CreativePromptBox";
 import BriefForm from "@/components/BriefForm";
 import ErrorBanner from "@/components/ErrorBanner";
@@ -285,6 +286,7 @@ export default function Home() {
   const anyImageGenerated = storyboardImages.some(Boolean);
 
   return (
+    <LicenseKeyGate>
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-10 sm:px-6">
       <div className="mb-2 space-y-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -448,5 +450,6 @@ export default function Home() {
         );
       })}
     </main>
+    </LicenseKeyGate>
   );
 }

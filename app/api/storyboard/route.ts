@@ -9,6 +9,7 @@ import {
 } from "@/lib/openai";
 import { validateApiKeyFormat, validateBrief, validateImageFile, validateSceneCount } from "@/lib/validation";
 import { deriveSceneRanges, deriveSheetSize, PRESERVE_IDENTITY_INSTRUCTION, type SceneRange } from "@/lib/prompt-template";
+import { requireValidLicenseKey } from "@/lib/api-guard";
 import type { ApiErrorBody, ScenePlanItem } from "@/lib/types";
 
 const VALID_MODES = ["full", "plan_only", "image_only", "prompt_only", "caption_only"] as const;
@@ -84,6 +85,9 @@ function buildStoryboardSheetPrompt(
 }
 
 export async function POST(request: NextRequest) {
+  const licenseError = await requireValidLicenseKey(request);
+  if (licenseError) return licenseError;
+
   const form = await request.formData();
 
   const apiKey = form.get("apiKey");

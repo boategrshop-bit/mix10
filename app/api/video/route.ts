@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GeminiApiError } from "@/lib/gemini";
 import { VeoApiError } from "@/lib/veo";
 import { selectVideoProvider } from "@/lib/video-provider";
+import { requireValidLicenseKey } from "@/lib/api-guard";
 import type { Orientation, VideoTarget, VoiceGender } from "@/lib/prompt-template";
 import type { ApiErrorBody, GenerateVideoInput } from "@/lib/types";
 
@@ -15,6 +16,9 @@ function errorResponse(code: string, message: string, status: number) {
 }
 
 export async function POST(request: NextRequest) {
+  const licenseError = await requireValidLicenseKey(request);
+  if (licenseError) return licenseError;
+
   const form = await request.formData();
 
   const apiKey = form.get("apiKey");

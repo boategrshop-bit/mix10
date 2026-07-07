@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchProductImageFromUrl, ProductLinkError } from "@/lib/product-link";
+import { requireValidLicenseKey } from "@/lib/api-guard";
 import type { ApiErrorBody } from "@/lib/types";
 
 function errorResponse(code: string, message: string, status: number) {
@@ -8,6 +9,9 @@ function errorResponse(code: string, message: string, status: number) {
 }
 
 export async function POST(request: NextRequest) {
+  const licenseError = await requireValidLicenseKey(request);
+  if (licenseError) return licenseError;
+
   const body = await request.json().catch(() => null);
   const url = body?.url;
 
