@@ -10,6 +10,7 @@ interface ApiKeyInputProps {
   placeholder: string;
   helpText: string;
   required?: boolean;
+  helpVideoUrl?: string;
 }
 
 export default function ApiKeyInput({
@@ -20,6 +21,7 @@ export default function ApiKeyInput({
   placeholder,
   helpText,
   required = true,
+  helpVideoUrl,
 }: ApiKeyInputProps) {
   const [open, setOpen] = useState(required && !value);
   const [show, setShow] = useState(false);
@@ -78,6 +80,16 @@ export default function ApiKeyInput({
             </button>
           </div>
           <p className="text-xs leading-relaxed text-gray-500">{helpText}</p>
+          {helpVideoUrl && (
+            <a
+              href={helpVideoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-xs font-medium text-[#7bafdb] underline underline-offset-2 hover:text-[#a3c8e6]"
+            >
+              วิธีขอ API key (ดูวิดีโอ)
+            </a>
+          )}
         </div>
       )}
     </div>

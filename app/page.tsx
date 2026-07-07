@@ -314,6 +314,7 @@ export default function Home() {
         placeholder="sk-..."
         required
         helpText="Your key stays in this browser tab and is sent only to OpenAI via our server for each request. It is never stored in a database."
+        helpVideoUrl="https://www.youtube.com/watch?v=_22bgJL8PL0"
       />
 
       <ApiKeyInput
@@ -324,6 +325,7 @@ export default function Home() {
         placeholder="AIza..."
         required={false}
         helpText="ไม่บังคับ — ถ้าไม่ใส่ ขั้นตอน Generate Video จะแสดงพรีวิวจำลองแทน ใส่แล้วเก็บเฉพาะในบราวเซอร์แท็บนี้เหมือนกับ OpenAI key ไม่มีการบันทึกลงฐานข้อมูล"
+        helpVideoUrl="https://www.youtube.com/watch?v=h507LoD5Fcw"
       />
 
       <BriefForm
