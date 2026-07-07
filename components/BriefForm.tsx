@@ -111,7 +111,7 @@ export default function BriefForm({
           onChange={onModelImagesChange}
         />
         {!creativeMode && (
-          <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} allowUrlImport />
+          <ImageUploader label="รูปสินค้า" file={productImage} onChange={onProductImageChange} />
         )}
       </div>
 
