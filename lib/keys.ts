@@ -107,6 +107,33 @@ export async function redeemLicenseKey(rawCode: string): Promise<RedeemResult> {
   return { ok: true, code: row.code, expiresAt: expiresAt ? expiresAt.toISOString() : undefined };
 }
 
+export const TRIAL_DURATION_DAYS = 3;
+
+// One free trial per IP: atomically claims the IP via ON CONFLICT DO NOTHING so
+// concurrent requests from the same IP can't race their way into two trials.
+export async function claimTrial(ip: string): Promise<RedeemResult> {
+  await ensureSchema();
+  const normalizedIp = ip.trim() || "unknown";
+
+  const claim = await getPool().query(
+    `INSERT INTO trial_claims (ip) VALUES ($1) ON CONFLICT (ip) DO NOTHING RETURNING ip`,
+    [normalizedIp]
+  );
+  if (claim.rowCount === 0) {
+    return { ok: false, reason: "คุณใช้สิทธิ์ทดลองฟรีไปแล้ว กรุณาติดต่อแอดมินเพื่อขอคีย์เพิ่มเติม" };
+  }
+
+  const code = generateKeyCode();
+  const result = await getPool().query(
+    `INSERT INTO license_keys (code, duration_days, activated_at, expires_at)
+     VALUES ($1, $2, now(), now() + make_interval(days => $2))
+     RETURNING *`,
+    [code, TRIAL_DURATION_DAYS]
+  );
+  const row = mapRow(result.rows[0]);
+  return { ok: true, code: row.code, expiresAt: row.expiresAt ?? undefined };
+}
+
 export async function checkKeyValid(rawCode: string): Promise<boolean> {
   await ensureSchema();
   const code = rawCode.trim().toUpperCase();

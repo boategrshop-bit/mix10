@@ -10,6 +10,7 @@ export default function LicenseKeyGate({ children }: LicenseKeyGateProps) {
   const [status, setStatus] = useState<"checking" | "valid" | "invalid">("checking");
   const [key, setKey] = useState("");
   const [loading, setLoading] = useState(false);
+  const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,6 +39,23 @@ export default function LicenseKeyGate({ children }: LicenseKeyGateProps) {
       setError(err instanceof Error ? err.message : "คีย์ไม่ถูกต้อง");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleStartTrial() {
+    setTrialLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/start-trial", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error?.message ?? "ขอทดลองใช้ไม่สำเร็จ");
+      }
+      setStatus("valid");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ขอทดลองใช้ไม่สำเร็จ");
+    } finally {
+      setTrialLoading(false);
     }
   }
 
@@ -73,7 +91,6 @@ export default function LicenseKeyGate({ children }: LicenseKeyGateProps) {
           className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-center font-mono text-sm uppercase text-gray-100 shadow-sm outline-none transition placeholder:text-gray-600 focus:border-[#4382BB] focus:ring-2 focus:ring-[#4382BB]/30"
           autoFocus
         />
-        {error && <p className="text-center text-xs text-red-400">{error}</p>}
         <button
           type="submit"
           disabled={loading || !key.trim()}
@@ -82,6 +99,23 @@ export default function LicenseKeyGate({ children }: LicenseKeyGateProps) {
           {loading ? "กำลังตรวจสอบ..." : "ยืนยันคีย์"}
         </button>
       </form>
+
+      {error && <p className="text-center text-xs text-red-400">{error}</p>}
+
+      <div className="flex items-center gap-3 text-xs text-gray-600">
+        <div className="h-px flex-1 bg-white/10" />
+        <span>หรือ</span>
+        <div className="h-px flex-1 bg-white/10" />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleStartTrial}
+        disabled={trialLoading}
+        className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-gray-200 shadow-sm transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {trialLoading ? "กำลังเริ่มทดลองใช้..." : "ทดลองใช้ฟรี 3 วัน (ไม่ต้องมีคีย์)"}
+      </button>
     </main>
   );
 }

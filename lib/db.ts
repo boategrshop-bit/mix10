@@ -34,6 +34,11 @@ async function initSchema(): Promise<void> {
       expires_at TIMESTAMPTZ,
       revoked BOOLEAN NOT NULL DEFAULT false
     );
+
+    CREATE TABLE IF NOT EXISTS trial_claims (
+      ip TEXT PRIMARY KEY,
+      claimed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }
 
