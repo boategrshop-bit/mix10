@@ -116,6 +116,10 @@ export default function LicenseKeyGate({ children }: LicenseKeyGateProps) {
       >
         {trialLoading ? "กำลังเริ่มทดลองใช้..." : "ทดลองใช้ฟรี 3 วัน (ไม่ต้องมีคีย์)"}
       </button>
+
+      <p className="text-center text-xs text-gray-500">
+        คีย์หมดอายุ หรืออยากซื้อคีย์เพิ่ม? ทักไลน์แอดมิน: <span className="font-medium text-gray-300">ba-ab2532</span>
+      </p>
     </main>
   );
 }
