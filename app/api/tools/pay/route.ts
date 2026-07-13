@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       approved: true,
-      downloadPath: `/tools/download/${order.downloadToken}`,
+      downloadPath: `/download/${order.downloadToken}`,
       emailSent: emailed.ok,
     });
   } catch (err) {

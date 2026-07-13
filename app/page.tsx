@@ -1,455 +1,210 @@
-"use client";
+import Link from "next/link";
+import {
+  STORE_NAME,
+  STORE_TAGLINE,
+  STORE_DESCRIPTION,
+  TOOLS,
+  STEPS,
+  FEATURES,
+  REVIEWS,
+  FAQS,
+  DEMO_VIDEO,
+  SHOWCASE_VIDEOS,
+  minPrice,
+} from "@/lib/tools-content";
+import FaqAccordion from "@/components/tools/FaqAccordion";
+import VideoEmbed from "@/components/tools/VideoEmbed";
 
-import { useState } from "react";
-import ApiKeyInput from "@/components/ApiKeyInput";
-import LicenseKeyGate from "@/components/LicenseKeyGate";
-import CreativePromptBox from "@/components/CreativePromptBox";
-import BriefForm from "@/components/BriefForm";
-import ErrorBanner from "@/components/ErrorBanner";
-import ProductAnalysisBox from "@/components/ProductAnalysisBox";
-import ScenePlanEditor from "@/components/ScenePlanEditor";
-import StoryboardSheetPreview from "@/components/StoryboardSheetPreview";
-import VideoPromptEditor from "@/components/VideoPromptEditor";
-import VoiceGenderSelector from "@/components/VoiceGenderSelector";
-import VideoTargetSelector from "@/components/VideoTargetSelector";
-import GenerateVideoPanel from "@/components/GenerateVideoPanel";
-import FullPromptCopyBox from "@/components/FullPromptCopyBox";
-import CaptionHashtagBox from "@/components/CaptionHashtagBox";
-import type { ScenePlanItem, VideoJobResult } from "@/lib/types";
-import { composeBrief, type BriefTemplateFields, type VideoTarget, type VoiceGender } from "@/lib/prompt-template";
-import { buildOmniFlashPromptText } from "@/lib/gemini";
-
-interface StoryboardError {
-  title: string;
-  message: string;
-  details?: string;
+function Stars() {
+  return (
+    <div className="flex gap-0.5 text-sm text-[#C6A15B]" aria-label="5 ดาว">
+      {"★★★★★".split("").map((s, i) => (
+        <span key={i}>{s}</span>
+      ))}
+    </div>
+  );
 }
 
-const DEFAULT_FIELDS: BriefTemplateFields = {
-  productName: "",
-  durationSeconds: 10,
-  orientation: "vertical",
-  style: "",
-  shotCount: null,
-  clipCount: 1,
-};
-
-function setAt<T>(setter: (updater: (prev: T[]) => T[]) => void, index: number, value: T) {
-  setter((prev) => {
-    const next = [...prev];
-    next[index] = value;
-    return next;
-  });
-}
-
-export default function Home() {
-  const [apiKey, setApiKey] = useState("");
-  const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [modelImages, setModelImages] = useState<File[]>([]);
-  const [productImage, setProductImage] = useState<File | null>(null);
-  const [fields, setFields] = useState<BriefTemplateFields>(DEFAULT_FIELDS);
-  const [customBrief, setCustomBrief] = useState<string | null>(null);
-  const [creativeMode, setCreativeMode] = useState(false);
-  const [creativePrompt, setCreativePrompt] = useState("");
-  const brief = creativeMode ? creativePrompt : (customBrief ?? composeBrief(fields));
-  const briefTouched = customBrief !== null;
-
-  function handleBriefChange(value: string) {
-    setCustomBrief(value);
-  }
-
-  function handleResetBrief() {
-    setCustomBrief(null);
-  }
-
-  // Each array below is indexed by clip; a "campaign" is 1-4 clips telling one
-  // continuous story, planned together in a single call. Every clip's storyboard,
-  // prompt, caption, and video are shown stacked together (no tab-switching).
-  const [clips, setClips] = useState<ScenePlanItem[][]>([]);
-  const [voiceoverScripts, setVoiceoverScripts] = useState<string[]>([]);
-  const [productAnalysis, setProductAnalysis] = useState("");
-  const [storyboardImages, setStoryboardImages] = useState<(string | null)[]>([]);
-  const [videoPrompts, setVideoPrompts] = useState<string[]>([]);
-  const [captions, setCaptions] = useState<string[]>([]);
-  const [hashtagsList, setHashtagsList] = useState<string[][]>([]);
-  const [scenePlanDirtyFlags, setScenePlanDirtyFlags] = useState<boolean[]>([]);
-  const [imageLoadingFlags, setImageLoadingFlags] = useState<boolean[]>([]);
-  const [promptLoadingFlags, setPromptLoadingFlags] = useState<boolean[]>([]);
-  const [captionLoadingFlags, setCaptionLoadingFlags] = useState<boolean[]>([]);
-  const [clipErrors, setClipErrors] = useState<(StoryboardError | null)[]>([]);
-
-  const [planLoading, setPlanLoading] = useState(false);
-  const [batchGenerating, setBatchGenerating] = useState(false);
-  const [voiceGender, setVoiceGender] = useState<VoiceGender>("female");
-  const [videoTarget, setVideoTarget] = useState<VideoTarget>("omni-flash");
-  const [storyboardError, setStoryboardError] = useState<StoryboardError | null>(null);
-
-  function baseForm(mode: string) {
-    const form = new FormData();
-    form.append("apiKey", apiKey);
-    form.append("brief", brief);
-    form.append("mode", mode);
-    form.append("durationSeconds", String(fields.durationSeconds));
-    if (fields.shotCount) form.append("sceneCount", String(fields.shotCount));
-    form.append("contentMode", creativeMode ? "creative" : "sales");
-    return form;
-  }
-
-  async function postStoryboard(form: FormData) {
-    const response = await fetch("/api/storyboard", { method: "POST", body: form });
-    const data = await response.json();
-    if (!response.ok) {
-      throw {
-        title: "Storyboard generation failed",
-        message: data?.error?.message ?? "Unknown error",
-        details: data?.error?.details,
-      } as StoryboardError;
-    }
-    return data;
-  }
-
-  async function handleGeneratePlan() {
-    setPlanLoading(true);
-    setStoryboardError(null);
-    try {
-      const form = baseForm("plan_only");
-      form.append("clipCount", String(fields.clipCount));
-      if (productImage) form.append("productImage", productImage);
-      const result = await postStoryboard(form);
-      const rawClips: { scenePlan: ScenePlanItem[]; voiceoverScript: string }[] = result.clips ?? [];
-      const newClips = rawClips.map((c) => c.scenePlan);
-      setClips(newClips);
-      setVoiceoverScripts(rawClips.map((c) => c.voiceoverScript));
-      setProductAnalysis(result.productAnalysis ?? "");
-      setStoryboardImages(newClips.map(() => null));
-      setVideoPrompts(newClips.map(() => ""));
-      setCaptions(newClips.map(() => ""));
-      setHashtagsList(newClips.map(() => []));
-      setScenePlanDirtyFlags(newClips.map(() => false));
-      setImageLoadingFlags(newClips.map(() => false));
-      setPromptLoadingFlags(newClips.map(() => false));
-      setCaptionLoadingFlags(newClips.map(() => false));
-      setClipErrors(newClips.map(() => null));
-    } catch (err) {
-      setStoryboardError(err as StoryboardError);
-    } finally {
-      setPlanLoading(false);
-    }
-  }
-
-  function handleCaptionChange(clipIndex: number, sceneIndex: number, value: string) {
-    setClips((prev) => {
-      const next = [...prev];
-      next[clipIndex] = next[clipIndex].map((s) => (s.index === sceneIndex ? { ...s, onScreenText: value } : s));
-      return next;
-    });
-    if (storyboardImages[clipIndex]) setAt(setScenePlanDirtyFlags, clipIndex, true);
-  }
-
-  function handleVoiceoverScriptChange(clipIndex: number, value: string) {
-    setAt(setVoiceoverScripts, clipIndex, value);
-    if (storyboardImages[clipIndex]) setAt(setScenePlanDirtyFlags, clipIndex, true);
-  }
-
-  async function requestVideoPrompt(clipIndex: number, imageBase64: string) {
-    const form = baseForm("prompt_only");
-    form.append("storyboardImageBase64", imageBase64);
-    const result = await postStoryboard(form);
-    if (result.videoPrompt) setAt(setVideoPrompts, clipIndex, result.videoPrompt);
-  }
-
-  async function requestCaption(clipIndex: number) {
-    const form = baseForm("caption_only");
-    const result = await postStoryboard(form);
-    setAt(setCaptions, clipIndex, result.caption ?? "");
-    setAt(setHashtagsList, clipIndex, result.hashtags ?? []);
-  }
-
-  async function generateOneClipImage(clipIndex: number) {
-    setAt(setImageLoadingFlags, clipIndex, true);
-    setAt(setClipErrors, clipIndex, null);
-    try {
-      const form = baseForm("image_only");
-      modelImages.forEach((img) => form.append("modelImages", img));
-      if (productImage) form.append("productImage", productImage);
-      form.append("scenePlan", JSON.stringify(clips[clipIndex] ?? []));
-      const result = await postStoryboard(form);
-      setAt(setStoryboardImages, clipIndex, result.storyboardImageBase64);
-      setAt(setScenePlanDirtyFlags, clipIndex, false);
-      setAt(setImageLoadingFlags, clipIndex, false);
-
-      setAt(setPromptLoadingFlags, clipIndex, true);
-      try {
-        await requestVideoPrompt(clipIndex, result.storyboardImageBase64);
-      } catch {
-        // non-fatal; user can still fill/regenerate the video prompt manually
-      } finally {
-        setAt(setPromptLoadingFlags, clipIndex, false);
-      }
-
-      if (!creativeMode) {
-        setAt(setCaptionLoadingFlags, clipIndex, true);
-        try {
-          await requestCaption(clipIndex);
-        } catch {
-          // non-fatal; user can still regenerate the caption manually
-        } finally {
-          setAt(setCaptionLoadingFlags, clipIndex, false);
-        }
-      }
-    } catch (err) {
-      setAt(setImageLoadingFlags, clipIndex, false);
-      setAt(setClipErrors, clipIndex, err as StoryboardError);
-    }
-  }
-
-  async function generateAllImages() {
-    setBatchGenerating(true);
-    for (let i = 0; i < clips.length; i++) {
-      await generateOneClipImage(i);
-    }
-    setBatchGenerating(false);
-  }
-
-  async function handleRegeneratePrompt(clipIndex: number) {
-    const image = storyboardImages[clipIndex];
-    if (!image) return;
-    setAt(setPromptLoadingFlags, clipIndex, true);
-    try {
-      await requestVideoPrompt(clipIndex, image);
-    } catch {
-      // keep existing prompt on failure
-    } finally {
-      setAt(setPromptLoadingFlags, clipIndex, false);
-    }
-  }
-
-  async function handleRegenerateCaption(clipIndex: number) {
-    setAt(setCaptionLoadingFlags, clipIndex, true);
-    try {
-      await requestCaption(clipIndex);
-    } catch {
-      // keep existing caption on failure
-    } finally {
-      setAt(setCaptionLoadingFlags, clipIndex, false);
-    }
-  }
-
-  async function handleGenerateVideo(clipIndex: number): Promise<VideoJobResult> {
-    const scenePlanForClip = clips[clipIndex] ?? [];
-    const narrationScript = voiceoverScripts[clipIndex] ?? "";
-    const captionScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
-
-    const form = new FormData();
-    form.append("storyboardImageBase64", storyboardImages[clipIndex] ?? "");
-    form.append("videoPrompt", videoPrompts[clipIndex] ?? "");
-    if (narrationScript) form.append("narrationScript", narrationScript);
-    if (captionScript) form.append("captionScript", captionScript);
-    form.append("voiceGender", voiceGender);
-    form.append("videoTarget", videoTarget);
-    form.append("orientation", fields.orientation);
-    if (geminiApiKey) {
-      form.append("apiKey", geminiApiKey);
-      if (modelImages[0]) form.append("modelImage", modelImages[0]);
-      if (productImage) form.append("productImage", productImage);
-    }
-
-    const response = await fetch("/api/video", { method: "POST", body: form });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error?.message ?? "Could not generate video. Please try again.");
-    }
-    return data as VideoJobResult;
-  }
-
-  function handleStartOver() {
-    setModelImages([]);
-    setProductImage(null);
-    setFields(DEFAULT_FIELDS);
-    setCustomBrief(null);
-    setCreativePrompt("");
-    setClips([]);
-    setVoiceoverScripts([]);
-    setProductAnalysis("");
-    setStoryboardImages([]);
-    setVideoPrompts([]);
-    setCaptions([]);
-    setHashtagsList([]);
-    setScenePlanDirtyFlags([]);
-    setImageLoadingFlags([]);
-    setPromptLoadingFlags([]);
-    setCaptionLoadingFlags([]);
-    setClipErrors([]);
-    setStoryboardError(null);
-  }
-
-  const anyImageGenerated = storyboardImages.some(Boolean);
+export default function ToolsStorePage() {
+  const from = minPrice();
 
   return (
-    <LicenseKeyGate>
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5 px-4 py-10 sm:px-6">
-      <div className="mb-2 space-y-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="MIX10" className="w-full max-w-none" />
-        <h1 className="bg-gradient-to-r from-[#7bafdb] to-[#4382BB] bg-clip-text text-3xl font-bold text-transparent">
-          สร้างสตอรี่บอร์ดและวิดีโอโฆษณาอัตโนมัติ
-        </h1>
-        <p className="text-sm leading-relaxed text-gray-400">
-          {creativeMode
-            ? "บอกไอเดียที่อยากสร้างด้านบน เลือกจำนวนคลิป/ฉาก แล้วระบบจะร่างแผนฉากให้แก้ไขก่อน แล้วค่อยรวมเป็นภาพสตอรี่บอร์ด"
-            : "อัปโหลดรูปนางแบบและสินค้า กรอกรายละเอียดสั้น ๆ ระบบจะวิเคราะห์สินค้าและร่างแผนฉากให้แก้ไขก่อน แล้วค่อยรวมเป็นภาพสตอรี่บอร์ด — เลือกได้ว่าจะให้เป็นแคมเปญกี่คลิป"}
-        </p>
-      </div>
+    <main>
+      {/* ── Hero ─────────────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-4xl px-5 pb-8 pt-16 sm:pt-24">
+        <div className="max-w-2xl">
+          <span className="inline-flex items-center rounded-full border border-[#DED6C6] px-3 py-1 text-xs font-medium text-[#8A8072]">
+            ✨ {STORE_NAME}
+          </span>
+          <h1 className="mt-5 text-balance text-3xl font-bold leading-snug text-[#1C1A17] sm:text-5xl sm:leading-tight">
+            {STORE_TAGLINE}
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-[#6B6252] sm:text-base">{STORE_DESCRIPTION}</p>
 
-      <CreativePromptBox
-        value={creativePrompt}
-        onChange={setCreativePrompt}
-        creativeMode={creativeMode}
-        onCreativeModeChange={setCreativeMode}
-      />
-
-      <ApiKeyInput
-        value={apiKey}
-        onChange={setApiKey}
-        label="OpenAI API key"
-        storageKey="openai_api_key"
-        placeholder="sk-..."
-        required
-        helpText="Your key stays in this browser tab and is sent only to OpenAI via our server for each request. It is never stored in a database."
-        helpVideoUrl="https://www.youtube.com/watch?v=_22bgJL8PL0"
-      />
-
-      <ApiKeyInput
-        value={geminiApiKey}
-        onChange={setGeminiApiKey}
-        label="Gemini API key (ไม่บังคับ — ใส่เพื่อสร้างวิดีโอจริงผ่าน Omni Flash)"
-        storageKey="gemini_api_key"
-        placeholder="AIza..."
-        required={false}
-        helpText="ไม่บังคับ — ถ้าไม่ใส่ ขั้นตอน Generate Video จะแสดงพรีวิวจำลองแทน ใส่แล้วเก็บเฉพาะในบราวเซอร์แท็บนี้เหมือนกับ OpenAI key ไม่มีการบันทึกลงฐานข้อมูล"
-        helpVideoUrl="https://www.youtube.com/watch?v=h507LoD5Fcw"
-      />
-
-      <BriefForm
-        apiKey={apiKey}
-        modelImages={modelImages}
-        productImage={productImage}
-        fields={fields}
-        brief={brief}
-        briefTouched={briefTouched}
-        loading={planLoading}
-        creativeMode={creativeMode}
-        onModelImagesChange={setModelImages}
-        onProductImageChange={setProductImage}
-        onFieldsChange={setFields}
-        onBriefChange={handleBriefChange}
-        onResetBrief={handleResetBrief}
-        onSubmit={handleGeneratePlan}
-      />
-
-      {(planLoading || (storyboardError && clips.length === 0)) && (
-        <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-sm backdrop-blur-sm">
-          <p className="text-sm font-semibold text-gray-100">แผนฉาก</p>
-          {planLoading && (
-            <div className="flex h-24 animate-pulse items-center justify-center rounded-xl bg-[#4382BB]/10 text-xs text-[#7bafdb]">
-              กำลังวิเคราะห์สินค้าและร่างแผนฉาก...
-            </div>
-          )}
-          {!planLoading && storyboardError && (
-            <ErrorBanner title={storyboardError.title} message={storyboardError.message} details={storyboardError.details} />
-          )}
-        </div>
-      )}
-
-      {!creativeMode && clips.length > 0 && <ProductAnalysisBox analysis={productAnalysis} />}
-
-      {clips.map((scenePlanForClip, i) => (
-        <div key={`plan-${i}`} className="space-y-2">
-          {clips.length > 1 && <p className="text-sm font-semibold text-[#7bafdb]">คลิปที่ {i + 1}</p>}
-          <ScenePlanEditor
-            scenePlan={scenePlanForClip}
-            voiceoverScript={voiceoverScripts[i] ?? ""}
-            loading={imageLoadingFlags[i] ?? false}
-            dirty={scenePlanDirtyFlags[i] ?? false}
-            onCaptionChange={(sceneIndex, value) => handleCaptionChange(i, sceneIndex, value)}
-            onVoiceoverScriptChange={(value) => handleVoiceoverScriptChange(i, value)}
-            onGenerateImage={() => generateOneClipImage(i)}
-          />
-        </div>
-      ))}
-
-      {clips.length > 1 && (
-        <button
-          type="button"
-          onClick={generateAllImages}
-          disabled={batchGenerating}
-          className="w-full rounded-xl bg-gradient-to-r from-[#5a9bd4] to-[#4382BB] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:shadow-lg hover:shadow-[#4382BB]/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
-        >
-          {batchGenerating ? "กำลังสร้างภาพทุกคลิป..." : `สร้างภาพสตอรี่บอร์ดทุกคลิป (${clips.length} คลิป)`}
-        </button>
-      )}
-
-      {anyImageGenerated && (
-        <>
-          <VoiceGenderSelector value={voiceGender} onChange={setVoiceGender} />
-          <VideoTargetSelector value={videoTarget} onChange={setVideoTarget} />
-        </>
-      )}
-
-      {clips.map((scenePlanForClip, i) => {
-        const image = storyboardImages[i] ?? null;
-        const imgLoading = imageLoadingFlags[i] ?? false;
-        const clipError = clipErrors[i] ?? null;
-        if (!(image || imgLoading || clipError)) return null;
-
-        const videoPrompt = videoPrompts[i] ?? "";
-        const narrationScript = voiceoverScripts[i] ?? "";
-        const captionScript = scenePlanForClip.map((s) => `[${s.startSeconds}s-${s.endSeconds}s] "${s.onScreenText}"`).join(" ");
-        const fullVideoPromptText = buildOmniFlashPromptText({ videoPrompt, narrationScript, captionScript, voiceGender });
-
-        return (
-          <div key={`result-${i}`} className="space-y-3">
-            {clips.length > 1 && <p className="text-sm font-semibold text-[#7bafdb]">คลิปที่ {i + 1}</p>}
-            <StoryboardSheetPreview
-              imageBase64={image}
-              loading={imgLoading}
-              error={clipError}
-              onRegenerate={() => generateOneClipImage(i)}
-            />
-            {image && (
-              <VideoPromptEditor
-                prompt={videoPrompt}
-                loading={promptLoadingFlags[i] ?? false}
-                onChange={(value) => setAt(setVideoPrompts, i, value)}
-                onRegenerate={() => handleRegeneratePrompt(i)}
-              />
-            )}
-            {!creativeMode && (imgLoading || image) && (
-              <CaptionHashtagBox
-                caption={captions[i] ?? ""}
-                hashtags={hashtagsList[i] ?? []}
-                loading={captionLoadingFlags[i] ?? false}
-                onRegenerate={() => handleRegenerateCaption(i)}
-              />
-            )}
-            {image && videoPrompt && (
-              <>
-                <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Google Flow" />
-                <FullPromptCopyBox promptText={fullVideoPromptText} platformName="Grok" />
-              </>
-            )}
-            {image && (
-              <GenerateVideoPanel
-                canGenerate={Boolean(image && videoPrompt)}
-                orientation={fields.orientation}
-                onGenerate={() => handleGenerateVideo(i)}
-                onStartOver={handleStartOver}
-              />
-            )}
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <a
+              href="#products"
+              className="rounded-full bg-[#1C1A17] px-7 py-3 text-sm font-semibold text-[#F7F3EA] transition hover:opacity-90"
+            >
+              ดูเครื่องมือทั้งหมด
+            </a>
+            <p className="text-sm text-[#8A8072]">
+              เริ่มต้นเพียง <span className="text-lg font-bold text-[#1C1A17]">{from.toLocaleString()}฿</span> · จ่ายครั้งเดียว
+            </p>
           </div>
-        );
-      })}
+        </div>
+      </section>
+
+      {/* ── How it works (3 steps) ───────────────────────── */}
+      <section className="mx-auto w-full max-w-4xl px-5 py-14">
+        <p className="text-sm font-semibold uppercase tracking-wide text-[#9A9081]">ใช้งานง่าย 3 ขั้นตอน</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          {STEPS.map((step, i) => (
+            <div key={step.title} className="rounded-2xl border border-[#E9E3D6] bg-[#FFFDF8] p-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F1EBDD] text-lg">
+                  {step.icon}
+                </span>
+                <span className="text-xs font-bold text-[#B3A992]">ขั้นที่ {i + 1}</span>
+              </div>
+              <h3 className="mt-4 text-lg font-bold text-[#1C1A17]">{step.title}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-[#6B6252]">{step.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Demo video ───────────────────────────────────── */}
+      {DEMO_VIDEO.src && (
+        <section className="mx-auto w-full max-w-3xl px-5 py-14">
+          <h2 className="text-2xl font-bold text-[#1C1A17]">คลิปสาธิตการใช้งาน</h2>
+          {DEMO_VIDEO.caption && <p className="mt-1 text-sm text-[#8A8072]">{DEMO_VIDEO.caption}</p>}
+          <div className="mt-6">
+            <VideoEmbed src={DEMO_VIDEO.src} title={DEMO_VIDEO.title} />
+          </div>
+        </section>
+      )}
+
+      {/* ── Products ─────────────────────────────────────── */}
+      <section id="products" className="mx-auto w-full max-w-4xl scroll-mt-24 px-5 py-14">
+        <h2 className="text-2xl font-bold text-[#1C1A17]">เลือกเครื่องมือ</h2>
+        <p className="mt-1 text-sm text-[#8A8072]">ทุกชิ้นจ่ายครั้งเดียว รับลิงก์ดาวน์โหลดทางอีเมลทันที</p>
+        <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          {TOOLS.map((tool) => (
+            <Link
+              key={tool.id}
+              href={`/${tool.id}`}
+              className={`group flex flex-col rounded-2xl border bg-[#FFFDF8] p-6 transition hover:shadow-[0_8px_30px_rgba(28,26,23,0.06)] ${
+                tool.badge ? "border-[#1C1A17]" : "border-[#E9E3D6] hover:border-[#1C1A17]"
+              }`}
+            >
+              {tool.badge && (
+                <span className="mb-3 inline-flex w-fit rounded-full bg-[#1C1A17] px-3 py-1 text-xs font-semibold text-[#F7F3EA]">
+                  {tool.badge}
+                </span>
+              )}
+              <h3 className="text-xl font-bold text-[#1C1A17]">{tool.name}</h3>
+              <p className="mt-1 text-sm text-[#8A8072]">{tool.tagline}</p>
+              <p className="mt-4 line-clamp-2 flex-1 text-sm leading-relaxed text-[#6B6252]">
+                {tool.description}
+              </p>
+              <div className="mt-6 flex items-center justify-between">
+                <span className="text-lg font-bold text-[#1C1A17]">
+                  {tool.priceThb.toLocaleString()}{" "}
+                  <span className="text-sm font-medium text-[#8A8072]">บาท</span>
+                </span>
+                <span className="rounded-full bg-[#1C1A17] px-4 py-2 text-sm font-semibold text-[#F7F3EA] transition group-hover:opacity-90">
+                  ดูรายละเอียด
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Features ─────────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-4xl px-5 py-14">
+        <h2 className="text-2xl font-bold text-[#1C1A17]">ทำไมต้องซื้อกับเรา</h2>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature) => (
+            <div key={feature.title} className="rounded-2xl border border-[#E9E3D6] bg-[#FFFDF8] p-5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F1EBDD] text-lg">
+                {feature.icon}
+              </span>
+              <h3 className="mt-4 text-base font-bold text-[#1C1A17]">{feature.title}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-[#6B6252]">{feature.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Showcase (example works) ─────────────────────── */}
+      {SHOWCASE_VIDEOS.length > 0 && (
+        <section className="mx-auto w-full max-w-4xl px-5 py-14">
+          <h2 className="text-2xl font-bold text-[#1C1A17]">ตัวอย่างผลงาน</h2>
+          <p className="mt-1 text-sm text-[#8A8072]">คลิปที่สร้างจากเครื่องมือของเรา</p>
+          <div className="mt-8 grid justify-items-center gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            {SHOWCASE_VIDEOS.map((video, i) => (
+              <figure key={`${video.src}-${i}`} className="w-full space-y-3">
+                <VideoEmbed src={video.src} title={video.title} />
+                <figcaption className="text-center">
+                  <p className="text-sm font-semibold text-[#1C1A17]">{video.title}</p>
+                  {video.caption && <p className="text-xs text-[#9A9081]">{video.caption}</p>}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Reviews ──────────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-4xl px-5 py-14">
+        <h2 className="text-2xl font-bold text-[#1C1A17]">รีวิวจากผู้ใช้จริง</h2>
+        <p className="mt-1 text-sm text-[#8A8072]">เสียงจากคนที่ใช้จริง 😊</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {REVIEWS.map((review) => (
+            <figure key={review.name} className="flex flex-col rounded-2xl border border-[#E9E3D6] bg-[#FFFDF8] p-6">
+              <Stars />
+              <blockquote className="mt-3 flex-1 text-sm leading-relaxed text-[#4A4239]">
+                “{review.text}”
+              </blockquote>
+              <figcaption className="mt-5 flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#F1EBDD] text-sm font-bold text-[#8A7A55]">
+                  {review.initial}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-[#1C1A17]">{review.name}</p>
+                  <p className="text-xs text-[#9A9081]">{review.role}</p>
+                </div>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FAQ ──────────────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-3xl px-5 py-14">
+        <h2 className="text-2xl font-bold text-[#1C1A17]">คำถามที่พบบ่อย</h2>
+        <div className="mt-6">
+          <FaqAccordion faqs={FAQS} />
+        </div>
+      </section>
+
+      {/* ── Final CTA ────────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-4xl px-5 pb-20 pt-6">
+        <div className="rounded-3xl border border-[#E9E3D6] bg-[#FFFDF8] px-8 py-12 text-center">
+          <h2 className="text-2xl font-bold text-[#1C1A17] sm:text-3xl">พร้อมเริ่มใช้งานแล้วหรือยัง?</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm text-[#6B6252]">
+            เลือกเครื่องมือที่ใช่ จ่ายครั้งเดียว รับลิงก์ดาวน์โหลดทางอีเมลทันที
+          </p>
+          <a
+            href="#products"
+            className="mt-7 inline-block rounded-full bg-[#1C1A17] px-8 py-3 text-sm font-semibold text-[#F7F3EA] transition hover:opacity-90"
+          >
+            ดูเครื่องมือทั้งหมด
+          </a>
+        </div>
+      </section>
     </main>
-    </LicenseKeyGate>
   );
 }

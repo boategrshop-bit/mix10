@@ -15,7 +15,7 @@ export default async function ToolProductPage({ params }: { params: Promise<{ pr
 
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-12">
-      <Link href="/tools" className="text-sm text-[#8A8072] transition hover:text-[#1C1A17]">
+      <Link href="/" className="text-sm text-[#8A8072] transition hover:text-[#1C1A17]">
         ← กลับไปหน้าสินค้า
       </Link>
 

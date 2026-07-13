@@ -125,7 +125,7 @@ export default function CheckoutPanel({
             แอดมินกำลังตรวจสอบ เมื่ออนุมัติแล้วระบบจะส่งลิงก์เข้าใช้งานไปที่อีเมลของคุณทันที
           </p>
         </div>
-        <a href="/tools/account" className="block text-center text-sm text-[#8A8072] underline">
+        <a href="/account" className="block text-center text-sm text-[#8A8072] underline">
           ดูสถานะคำสั่งซื้อในบัญชี
         </a>
       </div>
@@ -152,7 +152,7 @@ export default function CheckoutPanel({
             ดาวน์โหลดไฟล์
           </a>
         )}
-        <a href="/tools/account" className="block text-center text-sm text-[#8A8072] underline">
+        <a href="/account" className="block text-center text-sm text-[#8A8072] underline">
           ดูคำสั่งซื้อทั้งหมดในบัญชี
         </a>
       </div>

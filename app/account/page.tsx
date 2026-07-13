@@ -45,7 +45,7 @@ export default async function AccountPage() {
       {orders.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-[#E9E3D6] bg-[#FFFDF8] p-8 text-center text-sm text-[#8A8072]">
           ยังไม่มีคำสั่งซื้อ ·{" "}
-          <Link href="/tools" className="font-semibold text-[#1C1A17] underline">
+          <Link href="/" className="font-semibold text-[#1C1A17] underline">
             เลือกซื้อเครื่องมือ
           </Link>
         </div>
@@ -64,7 +64,7 @@ export default async function AccountPage() {
               </div>
               {o.status === "paid" ? (
                 <a
-                  href={`/tools/download/${o.downloadToken}`}
+                  href={`/download/${o.downloadToken}`}
                   className="rounded-full bg-[#1C1A17] px-5 py-2 text-sm font-semibold text-[#F7F3EA] transition hover:opacity-90"
                 >
                   ดาวน์โหลด
