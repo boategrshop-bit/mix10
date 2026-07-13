@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { TOOLS_COOKIE_NAME, verifyCustomerSessionToken } from "@/lib/tools-auth";
 import { listOrdersByCustomer } from "@/lib/tools-store";
+import { getToolById } from "@/lib/tools-content";
 import CustomerAuthPanel from "@/components/tools/CustomerAuthPanel";
 import LogoutButton from "@/components/tools/LogoutButton";
 
@@ -64,7 +65,7 @@ export default async function AccountPage() {
               </div>
               {o.status === "paid" ? (
                 <a
-                  href={`/download/${o.downloadToken}`}
+                  href={getToolById(o.productId)?.downloadUrl ?? `/download/${o.downloadToken}`}
                   className="rounded-full bg-[#1C1A17] px-5 py-2 text-sm font-semibold text-[#F7F3EA] transition hover:opacity-90"
                 >
                   ดาวน์โหลด

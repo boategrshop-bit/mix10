@@ -101,9 +101,11 @@ function shell(title: string, bodyHtml: string): string {
   </body></html>`;
 }
 
-// Confirmation + download link sent to the customer after payment.
+// Confirmation + download link sent to the customer after payment. Links
+// straight to the product's real asset (e.g. the Google Flow tool URL) so it
+// works regardless of whether this app's own domain is configured yet.
 export async function sendOrderConfirmation(order: ToolOrder, product: ToolProduct): Promise<{ ok: boolean; error?: string }> {
-  const downloadLink = `${getBaseUrl()}/tools/download/${order.downloadToken}`;
+  const downloadLink = product.downloadUrl;
   const html = shell("ขอบคุณสำหรับการสั่งซื้อ 🎉", `
     <p style="font-size:14px;line-height:1.7;color:#4a4239;margin:0 0 16px;">
       คำสั่งซื้อ <strong>#${order.id}</strong> ของคุณเสร็จสมบูรณ์แล้ว กดปุ่มด้านล่างเพื่อดาวน์โหลด
@@ -142,7 +144,7 @@ export async function sendAdminOrderNotification(
   const pending = Boolean(opts.pendingApproval);
   const heading = pending ? "มีออเดอร์ใหม่ รออนุมัติ ⏳" : "มีออเดอร์ใหม่ (ชำระแล้ว) 🛒";
   const intro = pending
-    ? `ลูกค้าแจ้งชำระเงินแล้ว กรุณาตรวจสอบและกดอนุมัติในหน้าแอดมิน (${getBaseUrl()}/tools/admin)`
+    ? `ลูกค้าแจ้งชำระเงินแล้ว กรุณาตรวจสอบและกดอนุมัติในหน้าแอดมิน (${getBaseUrl()}/admin)`
     : "มีการชำระเงินเข้ามาใหม่ และระบบส่งลิงก์ให้ลูกค้าอัตโนมัติแล้ว";
 
   const html = shell(heading, `
