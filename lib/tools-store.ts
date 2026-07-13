@@ -28,6 +28,9 @@ export interface ToolOrder {
   createdAt: string;
   paidAt: string | null;
   emailSentAt: string | null;
+  // Payment slip photo the customer uploads at checkout, stored as a data URL
+  // (data:image/jpeg;base64,...). Kept as proof for the admin to review.
+  slipDataUrl: string | null;
 }
 
 // Storage backend: Postgres when DATABASE_URL is set (production), otherwise a
@@ -63,6 +66,8 @@ async function initSchema(): Promise<void> {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    ALTER TABLE tool_orders ADD COLUMN IF NOT EXISTS slip_data_url TEXT;
   `);
 }
 
@@ -95,6 +100,7 @@ function mapOrder(row: {
   created_at: Date;
   paid_at: Date | null;
   email_sent_at: Date | null;
+  slip_data_url: string | null;
 }): ToolOrder {
   return {
     id: row.id,
@@ -108,6 +114,7 @@ function mapOrder(row: {
     createdAt: row.created_at.toISOString(),
     paidAt: row.paid_at ? row.paid_at.toISOString() : null,
     emailSentAt: row.email_sent_at ? row.email_sent_at.toISOString() : null,
+    slipDataUrl: row.slip_data_url ?? null,
   };
 }
 
@@ -184,6 +191,7 @@ export async function createOrder(customer: CustomerRow, product: ToolProduct): 
       createdAt: new Date().toISOString(),
       paidAt: null,
       emailSentAt: null,
+      slipDataUrl: null,
     });
   }
 
@@ -223,6 +231,21 @@ export async function markOrderPaid(id: number): Promise<ToolOrder | null> {
   const result = await getPool().query(
     `UPDATE tool_orders SET status = 'paid', paid_at = COALESCE(paid_at, now()) WHERE id = $1 RETURNING *`,
     [id]
+  );
+  const row = result.rows[0];
+  return row ? mapOrder(row) : null;
+}
+
+// Saves the payment-slip photo the customer uploaded at checkout, as proof
+// for the admin to review — independent of auto-approve status.
+export async function attachPaymentSlip(id: number, dataUrl: string): Promise<ToolOrder | null> {
+  await ensureToolsSchema();
+  if (!useDb()) {
+    return toolsFileStore.updateOrder(id, { slipDataUrl: dataUrl });
+  }
+  const result = await getPool().query(
+    `UPDATE tool_orders SET slip_data_url = $1 WHERE id = $2 RETURNING *`,
+    [dataUrl, id]
   );
   const row = result.rows[0];
   return row ? mapOrder(row) : null;

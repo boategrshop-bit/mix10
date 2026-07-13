@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { PAYMENT } from "@/lib/tools-content";
 
 interface CheckoutProduct {
@@ -19,6 +19,36 @@ const inputClass =
 const primaryBtn =
   "w-full rounded-xl bg-[#1C1A17] px-4 py-3 text-sm font-bold text-[#F7F3EA] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40";
 
+// Downscales + re-encodes the slip photo client-side so the upload stays a
+// few hundred KB instead of a multi-megabyte phone-camera original.
+function compressImage(file: File, maxDim = 1280, quality = 0.75): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("ไฟล์นี้ไม่ใช่รูปภาพที่ใช้ได้"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("เบราว์เซอร์นี้ไม่รองรับการประมวลผลรูปภาพ"));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function CheckoutPanel({
   product,
   initialEmail,
@@ -36,6 +66,9 @@ export default function CheckoutPanel({
   const [downloadPath, setDownloadPath] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [qrOk, setQrOk] = useState(true);
+  const [slipDataUrl, setSlipDataUrl] = useState<string | null>(null);
+  const [slipProcessing, setSlipProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function createOrder(): Promise<boolean> {
     const res = await fetch("/api/tools/order", {
@@ -84,15 +117,35 @@ export default function CheckoutPanel({
     }
   }
 
+  async function handleSlipChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSlipProcessing(true);
+    setError(null);
+    try {
+      const compressed = await compressImage(file);
+      setSlipDataUrl(compressed);
+    } catch (err) {
+      setSlipDataUrl(null);
+      setError(err instanceof Error ? err.message : "แนบไฟล์สลิปไม่สำเร็จ");
+    } finally {
+      setSlipProcessing(false);
+    }
+  }
+
   async function handlePaid() {
     if (!orderId) return;
+    if (!slipDataUrl) {
+      setError("กรุณาแนบสลิปโอนเงินก่อนยืนยัน");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/tools/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, slipDataUrl }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message ?? "ยืนยันไม่สำเร็จ");
@@ -192,13 +245,48 @@ export default function CheckoutPanel({
         </div>
 
         <p className="text-xs leading-relaxed text-[#9A9081]">
-          สแกน QR หรือโอนเข้าบัญชีด้านบน จากนั้นกดปุ่มด้านล่าง ระบบจะส่งลิงก์ดาวน์โหลดเข้าอีเมลทันที
+          สแกน QR หรือโอนเข้าบัญชีด้านบน แนบสลิปโอนเงิน แล้วกดปุ่มด้านล่าง ระบบจะส่งลิงก์ดาวน์โหลดเข้าอีเมลทันที
           (ทีมงานจะตรวจสอบยอดอีกครั้งภายหลัง)
         </p>
 
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-[#4A4239]">สลิปโอนเงิน</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleSlipChange}
+            className="hidden"
+          />
+          {slipDataUrl ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="block w-full overflow-hidden rounded-xl border border-[#E9E3D6] bg-white p-2"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={slipDataUrl} alt="สลิปโอนเงินที่แนบ" className="mx-auto max-h-48 rounded-lg object-contain" />
+              <span className="mt-2 block text-center text-xs text-[#8A8072]">แตะเพื่อเปลี่ยนรูป</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={slipProcessing}
+              className="flex w-full flex-col items-center gap-1 rounded-xl border border-dashed border-[#DED6C6] bg-white px-4 py-6 text-center transition hover:border-[#1C1A17] disabled:opacity-60"
+            >
+              <span className="text-xl">🧾</span>
+              <span className="text-sm font-medium text-[#3A342B]">
+                {slipProcessing ? "กำลังประมวลผลรูป..." : "แตะเพื่ออัพโหลดสลิป"}
+              </span>
+              <span className="text-xs text-[#9A9081]">รองรับไฟล์รูปภาพ</span>
+            </button>
+          )}
+        </div>
+
         {error && <p className="text-xs text-red-500">{error}</p>}
 
-        <button onClick={handlePaid} disabled={loading} className={primaryBtn}>
+        <button onClick={handlePaid} disabled={loading || slipProcessing || !slipDataUrl} className={primaryBtn}>
           {loading ? "กำลังยืนยัน..." : "ชำระเงินแล้ว รับลิงก์ดาวน์โหลด"}
         </button>
       </div>

@@ -11,6 +11,7 @@ interface Order {
   createdAt: string;
   paidAt: string | null;
   emailSentAt: string | null;
+  slipDataUrl: string | null;
 }
 
 function formatDate(iso: string | null): string {
@@ -172,6 +173,7 @@ export default function ToolsAdminDashboard() {
                 <th className="px-4 py-3 font-semibold">สินค้า</th>
                 <th className="px-4 py-3 font-semibold">ลูกค้า</th>
                 <th className="px-4 py-3 font-semibold">ยอด</th>
+                <th className="px-4 py-3 font-semibold">สลิป</th>
                 <th className="px-4 py-3 font-semibold">สถานะ</th>
                 <th className="px-4 py-3 font-semibold">อีเมล</th>
                 <th className="px-4 py-3 font-semibold">จัดการ</th>
@@ -187,6 +189,20 @@ export default function ToolsAdminDashboard() {
                   </td>
                   <td className="px-4 py-3">{o.customerEmail}</td>
                   <td className="px-4 py-3 font-semibold">{o.amountThb.toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    {o.slipDataUrl ? (
+                      <a href={o.slipDataUrl} target="_blank" rel="noopener noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={o.slipDataUrl}
+                          alt={`สลิปออเดอร์ #${o.id}`}
+                          className="h-12 w-12 rounded-lg border border-[#E9E3D6] object-cover transition hover:opacity-80"
+                        />
+                      </a>
+                    ) : (
+                      <span className="text-xs text-[#B3A992]">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {o.status === "paid" ? (
                       <span className="rounded-full bg-[#E4EFE0] px-2 py-0.5 text-xs font-semibold text-[#4A7A3A]">

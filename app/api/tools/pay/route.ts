@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TOOLS_COOKIE_NAME, verifyCustomerSessionToken } from "@/lib/tools-auth";
-import { getOrderById, markOrderPaid, markOrderEmailSent } from "@/lib/tools-store";
+import { getOrderById, markOrderPaid, markOrderEmailSent, attachPaymentSlip } from "@/lib/tools-store";
 import { getAutoApprove } from "@/lib/tools-settings";
 import { getToolById } from "@/lib/tools-content";
 import { sendOrderConfirmation, sendAdminOrderNotification } from "@/lib/email";
+
+const MAX_SLIP_LENGTH = 6_000_000; // ~4.5MB of image data as base64
 
 // Customer payment confirmation. Behaviour depends on the store's auto-approve
 // setting (toggled by the admin):
@@ -20,6 +22,13 @@ export async function POST(request: NextRequest) {
   if (!Number.isFinite(orderId)) {
     return NextResponse.json({ error: { message: "ไม่พบคำสั่งซื้อ" } }, { status: 400 });
   }
+  const slipDataUrl = body?.slipDataUrl;
+  if (typeof slipDataUrl !== "string" || !slipDataUrl.startsWith("data:image/")) {
+    return NextResponse.json({ error: { message: "กรุณาแนบสลิปโอนเงิน" } }, { status: 400 });
+  }
+  if (slipDataUrl.length > MAX_SLIP_LENGTH) {
+    return NextResponse.json({ error: { message: "ไฟล์สลิปใหญ่เกินไป กรุณาแนบไฟล์ที่เล็กลง" } }, { status: 400 });
+  }
 
   try {
     const existing = await getOrderById(orderId);
@@ -31,10 +40,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: { message: "ไม่พบสินค้าของคำสั่งซื้อนี้" } }, { status: 400 });
     }
 
+    await attachPaymentSlip(orderId, slipDataUrl);
+
     const autoApprove = await getAutoApprove();
 
     if (!autoApprove) {
-      // Manual approval: keep the order pending and ask the admin to review.
+      // Manual approval: keep the order pending and ask the admin to review the slip.
       await sendAdminOrderNotification(existing, product, { pendingApproval: true });
       return NextResponse.json({ ok: true, approved: false });
     }
