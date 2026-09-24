@@ -40,7 +40,7 @@ export const PAYMENT = {
 const PROGRAM_NAME = "Minimal Tools";
 // ลิงก์เข้าใช้งานโปรแกรมจริง (Google Flow shared tool) หรือไฟล์ใน /public ก็ได้
 const PROGRAM_FILE =
-  "https://labs.google/fx/tools/flow/shared/tool/91efa968-656b-44ca-9073-db3e3f1dace5";
+  "https://labs.google/fx/tools/flow/shared/tool/50b78a3a-d43f-4b77-b07a-53072ae76112";
 // ลิงก์เชิญเข้าไลน์กลุ่ม สำหรับแพ็กเกจโปร — จะถูกแนบไปในอีเมลยืนยันหลังชำระเงิน
 const LINE_GROUP_URL =
   "https://line.me/ti/g2/axAKlAUpnDFhbFgZ5Kn14U4B7NU4Zx39VXA07Q?utm_source=invitation&utm_medium=link_copy&utm_campaign=default";
